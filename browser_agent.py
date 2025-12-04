@@ -411,10 +411,36 @@ class OracleBrowserAgent:
             # Click "Create Item" if first item
             if is_first:
                 if self.logger:
-                    self.logger.debug("Clicking 'Create Item'...")
-                create_item_selector = buttons.get('create_item')
-                self.page.click(create_item_selector, timeout=10000)
-                time.sleep(1)
+                    self.logger.info("Clicking 'Create Item'...")
+                
+                # Try multiple selectors for Create Item button
+                create_item_selectors = [
+                    "text=Create Item",
+                    "button:has-text('Create Item')",
+                    "a:has-text('Create Item')",
+                    "[aria-label*='Create Item']",
+                    "span:has-text('Create Item')"
+                ]
+                
+                clicked = False
+                for selector in create_item_selectors:
+                    try:
+                        loc = self.page.locator(selector).first
+                        if loc.is_visible(timeout=2000):
+                            loc.click()
+                            clicked = True
+                            if self.logger:
+                                self.logger.info("✅ Clicked Create Item")
+                            break
+                    except:
+                        continue
+                
+                if not clicked:
+                    if self.logger:
+                        self.logger.error("Could not find Create Item button")
+                    return False
+                
+                time.sleep(2)  # Wait for form to load
             
             # Fill type
             if self.logger:
