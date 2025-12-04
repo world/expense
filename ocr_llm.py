@@ -129,18 +129,19 @@ Your task:
 CRITICAL INSTRUCTIONS - YOU MUST FOLLOW EXACTLY:
 1. Return ONLY a single JSON object - no markdown, no explanations
 2. Include ALL 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description
-3. Date MUST be DD-MM-YYYY format (e.g., "15-01-2025")
-4. type_key must match one of: {', '.join([et['type_key'] for et in self.expense_types])}
+3. Date: Extract from receipt in DD-MM-YYYY format (e.g., "15-01-2025"). If no date visible, use today's date: {datetime.now().strftime('%d-%m-%Y')}
+4. Description: Concise 2-5 word description based on merchant (e.g., "Coffee and snack", "Rideshare to airport", "Hotel stay")
+5. type_key must match one of: {', '.join([et['type_key'] for et in self.expense_types])}
 
 Example format (you must follow this exact structure):
-{{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":15.75,"currency":"USD","date":"15-01-2025","description":"Coffee and breakfast"}}
+{{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":15.75,"currency":"USD","date":"15-01-2025","description":"Coffee and snack"}}
 
-If you cannot find a date, use null. If unclear on amount, use 0. But you MUST include all 7 fields."""
+ALL 7 fields are REQUIRED and MUST have values (no null, no empty strings)."""
 
         user_prompt = f"""Receipt text:
 {ocr_text}
 
-Return ONLY the JSON with all 7 fields (type_key, type_label, merchant, total_amount, currency, date, description)."""
+Return ONLY the JSON with all 7 fields. Remember: date must be DD-MM-YYYY (use {datetime.now().strftime('%d-%m-%Y')} if unclear), description must be concise (2-5 words)."""
 
         return [
             {"role": "system", "content": system_prompt},
@@ -173,12 +174,12 @@ Return ONLY the JSON with all 7 fields (type_key, type_label, merchant, total_am
             # Parse JSON
             data = json.loads(response_text.strip())
             
-            # Validate required fields
-            required = ['type_key', 'type_label', 'merchant', 'total_amount', 'currency']
-            for field in required:
-                if field not in data:
-                    warnings.append(f"LLM response missing field: {field}")
-                    return None, warnings
+            # Validate all 7 required fields
+            required = ['type_key', 'type_label', 'merchant', 'total_amount', 'currency', 'date', 'description']
+            missing = [field for field in required if field not in data or data[field] is None or str(data[field]).strip() == '']
+            if missing:
+                warnings.append(f"LLM response missing required fields: {missing}")
+                return None, warnings
             
             # Validate amount
             try:
@@ -197,17 +198,17 @@ Return ONLY the JSON with all 7 fields (type_key, type_label, merchant, total_am
                 data['type_key'] = 'OTHER'
                 data['type_label'] = 'Other'
             
-            # Ensure description exists
-            if 'description' not in data or not data['description']:
-                data['description'] = f"{data['merchant']} - {data['type_label']}"
-                warnings.append("Generated description from merchant and type")
+            # Validate description is concise
+            if data['description'] and len(data['description']) > 100:
+                warnings.append(f"Description too long ({len(data['description'])} chars), truncating to 50 chars")
+                data['description'] = data['description'][:50].strip()
             
-            # Parse and normalize date if present
+            # Parse and normalize date
             date_value = data.get('date')
-            if date_value and date_value != 'null':
+            if date_value and str(date_value).lower() not in ['null', 'none', '']:
                 try:
                     # Remove any None or 'null' string values
-                    if str(date_value).lower() == 'null':
+                    if str(date_value).lower() in ['null', 'none']:
                         data['date'] = None
                     else:
                         # Try multiple date formats
