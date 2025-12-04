@@ -9,16 +9,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytesseract
 from openai import OpenAI
+from anthropic import Anthropic
 from PIL import Image, ImageEnhance, ImageFilter
 
 
 class ReceiptProcessor:
     """Handles OCR extraction and LLM analysis of receipts."""
     
-    def __init__(self, llm_client: OpenAI, model: str, expense_types: List[Dict[str, Any]], logger=None):
+    def __init__(self, llm_client: Any, model: str, expense_types: List[Dict[str, Any]], provider: str = "openai", logger=None):
         self.llm_client = llm_client
         self.model = model
         self.expense_types = expense_types
+        self.provider = provider  # "openai" or "anthropic"
         self.logger = logger
     
     def preprocess_image(self, image: Image.Image) -> Image.Image:
@@ -245,14 +247,27 @@ Return JSON only."""
             if self.logger:
                 self.logger.debug(f"Calling LLM for {image_path.name}...")
             
-            response = self.llm_client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0,
-                max_tokens=500
-            )
-            
-            llm_response = response.choices[0].message.content.strip()
+            if self.provider == "anthropic":
+                # Use Anthropic API format
+                response = self.llm_client.messages.create(
+                    model=self.model,
+                    max_tokens=500,
+                    temperature=0,
+                    messages=[{"role": "user", "content": messages[1]["content"]}]  # Use user message only
+                )
+                
+                # Anthropic returns content differently
+                llm_response = response.content[0].text.strip()
+            else:
+                # Use OpenAI API format
+                response = self.llm_client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0,
+                    max_tokens=500
+                )
+                
+                llm_response = response.choices[0].message.content.strip()
             
             if self.logger:
                 self.logger.debug(f"LLM response received ({len(llm_response)} chars)")

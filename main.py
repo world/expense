@@ -198,6 +198,7 @@ def main():
         llm_client=config.llm_client,
         model=config.get_llm_config()['model'],
         expense_types=config.get_expense_types(),
+        provider=config.llm_provider or "openai",
         logger=logger
     )
     
