@@ -6,28 +6,88 @@
   },
   "expense_types": [
     {
-      "type_key": "MEAL",
-      "type_label": "Meals",
-      "keywords": ["restaurant", "cafe", "coffee", "lunch", "dinner", "food"]
+      "type_key": "MEALS_BREAKFAST",
+      "type_label": "Meals-Breakfast and Tip",
+      "keywords": ["breakfast", "starbucks", "dunkin", "panera", "coffee", "bagel", "morning"]
     },
     {
-      "type_key": "TRANSPORT",
-      "type_label": "Transportation",
-      "keywords": ["uber", "lyft", "taxi", "parking", "gas", "fuel", "transit"]
+      "type_key": "MEALS_LUNCH",
+      "type_label": "Meals-Lunch and Tip",
+      "keywords": ["lunch", "chipotle", "subway", "sandwich", "salad", "noon", "midday"]
     },
     {
-      "type_key": "HOTEL",
-      "type_label": "Lodging",
-      "keywords": ["hotel", "motel", "airbnb", "lodging", "accommodation"]
+      "type_key": "MEALS_DINNER",
+      "type_label": "Meals-Dinner and Tip",
+      "keywords": ["dinner", "restaurant", "steakhouse", "evening", "supper"]
     },
     {
-      "type_key": "SUPPLIES",
-      "type_label": "Office Supplies",
-      "keywords": ["office", "supplies", "staples", "depot", "paper"]
+      "type_key": "TRAVEL_AIRFARE",
+      "type_label": "Travel-Airfare",
+      "keywords": ["airline", "flight", "delta", "united", "american airlines", "southwest", "jetblue"]
     },
     {
-      "type_key": "OTHER",
-      "type_label": "Other",
+      "type_key": "TRAVEL_HOTEL",
+      "type_label": "Travel-Hotel Accommodation",
+      "keywords": ["hotel", "marriott", "hilton", "hyatt", "airbnb", "lodging", "accommodation"]
+    },
+    {
+      "type_key": "TRAVEL_CAR_RENTAL",
+      "type_label": "Travel-Car Rental",
+      "keywords": ["hertz", "enterprise", "avis", "budget", "car rental", "rental car"]
+    },
+    {
+      "type_key": "TRAVEL_GASOLINE",
+      "type_label": "Travel-Gasoline",
+      "keywords": ["shell", "chevron", "exxon", "mobil", "bp", "gas", "fuel", "gasoline"]
+    },
+    {
+      "type_key": "TRAVEL_PARKING",
+      "type_label": "Travel-Parking And Tolls",
+      "keywords": ["parking", "toll", "garage", "parkwhiz", "spothero"]
+    },
+    {
+      "type_key": "TAXI",
+      "type_label": "Taxi",
+      "keywords": ["taxi", "cab", "yellow cab"]
+    },
+    {
+      "type_key": "TRAVEL_GROUND_TRANSPORT",
+      "type_label": "Travel-Non-Car Rental Ground Transport",
+      "keywords": ["uber", "lyft", "rideshare", "train", "subway", "metro", "bus"]
+    },
+    {
+      "type_key": "OFFICE_SUPPLIES",
+      "type_label": "Office And Print Supplies",
+      "keywords": ["staples", "office depot", "amazon", "paper", "pens", "supplies", "printer"]
+    },
+    {
+      "type_key": "MOBILE_PHONE",
+      "type_label": "Mobile Phone",
+      "keywords": ["verizon", "at&t", "t-mobile", "sprint", "phone bill", "cellular"]
+    },
+    {
+      "type_key": "SOFTWARE",
+      "type_label": "Software",
+      "keywords": ["software", "subscription", "saas", "microsoft", "adobe", "license"]
+    },
+    {
+      "type_key": "SHIPPING",
+      "type_label": "Shipping",
+      "keywords": ["fedex", "ups", "usps", "dhl", "shipping", "postage"]
+    },
+    {
+      "type_key": "TRAINING",
+      "type_label": "Training",
+      "keywords": ["training", "course", "conference", "workshop", "seminar", "udemy", "coursera"]
+    },
+    {
+      "type_key": "MEETINGS",
+      "type_label": "Meetings and Conferences",
+      "keywords": ["conference", "convention", "summit", "event", "meeting"]
+    },
+    {
+      "type_key": "MISC_OTHER",
+      "type_label": "Miscellaneous Other",
       "keywords": []
     }
   ],
