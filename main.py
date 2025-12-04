@@ -334,11 +334,10 @@ def main():
                                 updated_types.append(existing)
                             else:
                                 # New type - create basic entry
-                                type_key = label.upper().replace(' ', '_').replace('-', '_')
+                                type_key = label.upper().replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
                                 updated_types.append({
                                     "type_key": type_key,
-                                    "type_label": label,
-                                    "keywords": []
+                                    "type_label": label
                                 })
                         
                         # Update config
