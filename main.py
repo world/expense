@@ -291,13 +291,11 @@ def main():
             # Navigate to Oracle
             if not browser_agent.navigate_to_oracle():
                 logger.error("Failed to navigate to Oracle. Exiting.")
-                browser_agent.stop()
                 sys.exit(1)
             
             # Wait for login
             if not browser_agent.wait_for_login():
                 logger.error("Login failed or timed out. Exiting.")
-                browser_agent.stop()
                 sys.exit(1)
             
             # Pre-analyze receipts to find first city that's NOT your airport city
@@ -319,7 +317,6 @@ def main():
             purpose = f"Trip to {trip_destination}"
             if not browser_agent.create_new_report(purpose):
                 logger.error("Failed to create new report. Exiting.")
-                browser_agent.stop()
                 sys.exit(1)
             
             # Skip scraping - use expense types from config.json
@@ -327,8 +324,6 @@ def main():
         
         except Exception as e:
             logger.error(f"Browser initialization failed: {e}")
-            if browser_agent:
-                browser_agent.stop()
             sys.exit(1)
     
     # Create workflow
@@ -345,8 +340,6 @@ def main():
         
         if not success:
             logger.error("No receipts were successfully processed")
-            if browser_agent:
-                browser_agent.stop()
             sys.exit(1)
         
         logger.info("\n✅ Expense processing complete!")
