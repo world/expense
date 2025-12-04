@@ -121,6 +121,9 @@ class ExpenseWorkflow:
         
         if not data:
             self.logger.error(f"Failed to analyze receipt {image_path.name}")
+            if warnings:
+                for warning in warnings:
+                    self.logger.error(f"  └─ {warning}")
             self.receipts_skipped += 1
             return False
         
