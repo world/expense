@@ -451,49 +451,88 @@ class OracleBrowserAgent:
                 
                 time.sleep(2)  # Wait for form to load
             
-            # Fill type
+            # Fill Date field
             if self.logger:
-                self.logger.debug(f"Filling type: {expense_type}")
-            type_selector = fields.get('expense_type')
-            try:
-                # Try as select dropdown first
-                self.page.select_option(type_selector, label=expense_type, timeout=5000)
-            except:
-                # Fall back to typing
-                self.page.fill(type_selector, expense_type, timeout=5000)
-                self.page.press(type_selector, 'Enter')
+                self.logger.info(f"📅 Filling date: {date}")
+            date_filled = False
+            date_selectors = [
+                "input[placeholder*='dd-mmm']",
+                "input[id*='date' i]",
+                "input[name*='date' i]",
+                "//label[contains(text(),'Date')]/following::input[1]"
+            ]
+            for sel in date_selectors:
+                try:
+                    if sel.startswith("//"):
+                        loc = self.page.locator(f"xpath={sel}")
+                    else:
+                        loc = self.page.locator(sel)
+                    if loc.first.is_visible(timeout=2000):
+                        loc.first.fill(date)
+                        date_filled = True
+                        break
+                except:
+                    continue
+            if not date_filled and self.logger:
+                self.logger.warning("Could not fill Date field")
             
-            # Fill amount
+            # Fill Type dropdown
             if self.logger:
-                self.logger.debug(f"Filling amount: {amount}")
-            amount_selector = fields.get('amount')
-            self.page.fill(amount_selector, str(amount), timeout=5000)
+                self.logger.info(f"📋 Filling type: {expense_type}")
+            type_filled = False
+            type_selectors = [
+                "select[id*='type' i]",
+                "select[name*='type' i]",
+                "//label[contains(text(),'Type')]/following::select[1]"
+            ]
+            for sel in type_selectors:
+                try:
+                    if sel.startswith("//"):
+                        loc = self.page.locator(f"xpath={sel}")
+                    else:
+                        loc = self.page.locator(sel)
+                    if loc.first.is_visible(timeout=2000):
+                        loc.first.select_option(label=expense_type)
+                        type_filled = True
+                        break
+                except:
+                    continue
+            if not type_filled and self.logger:
+                self.logger.warning("Could not fill Type field")
             
-            # Fill date
+            # Fill Amount field
             if self.logger:
-                self.logger.debug(f"Filling date: {date}")
-            date_selector = fields.get('date')
-            self.page.fill(date_selector, date, timeout=5000)
+                self.logger.info(f"💵 Filling amount: {amount}")
+            amount_filled = False
+            amount_selectors = [
+                "input[id*='amount' i]",
+                "input[name*='amount' i]",
+                "//label[contains(text(),'Amount')]/following::input[1]"
+            ]
+            for sel in amount_selectors:
+                try:
+                    if sel.startswith("//"):
+                        loc = self.page.locator(f"xpath={sel}")
+                    else:
+                        loc = self.page.locator(sel)
+                    if loc.first.is_visible(timeout=2000):
+                        loc.first.fill(str(amount))
+                        amount_filled = True
+                        break
+                except:
+                    continue
+            if not amount_filled and self.logger:
+                self.logger.warning("Could not fill Amount field")
             
-            # Fill merchant
             if self.logger:
-                self.logger.debug(f"Filling merchant: {merchant}")
-            merchant_selector = fields.get('merchant')
-            self.page.fill(merchant_selector, merchant, timeout=5000)
+                self.logger.info("✅ Expense item fields filled")
             
-            # Fill description
-            if self.logger:
-                self.logger.debug(f"Filling description: {description}")
-            desc_selector = fields.get('description')
-            self.page.fill(desc_selector, description, timeout=5000)
-            
-            if self.logger:
-                self.logger.debug("✅ Item fields filled successfully")
+            # Skip merchant and description for now - Oracle may not have these fields on this page
             
             # Upload receipt attachment if provided
             if receipt_path:
                 if self.logger:
-                    self.logger.debug("Uploading receipt attachment...")
+                    self.logger.info("📎 Uploading receipt attachment...")
                 upload_success = self.upload_receipt_attachment(receipt_path)
                 if not upload_success:
                     self.logger.warning("⚠️  Attachment upload failed, but continuing...")

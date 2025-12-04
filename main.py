@@ -360,13 +360,15 @@ def main():
         logger.error(f"\n❌ Unexpected error: {e}")
         import traceback
         logger.debug(traceback.format_exc())
-    finally:
-        # Cleanup
-        if browser_agent:
-            logger.info("Closing browser...")
-            browser_agent.stop()
     
     logger.info("Done!")
+    
+    # Keep browser open for user to review/complete
+    if browser_agent and not args.test:
+        print("\n" + "=" * 60)
+        print("🌐 Browser left open for you to review/complete.")
+        print("   Close the browser manually when done.")
+        print("=" * 60)
 
 
 if __name__ == '__main__':
