@@ -79,7 +79,20 @@ The default `config.json` includes common expense types:
 - Office Supplies
 - Other
 
-You can customize these in `config.json` under the `expense_types` array.
+**IMPORTANT**: You should customize these to match YOUR Oracle Expenses categories:
+
+```json
+"expense_types": [
+  {
+    "type_key": "MEAL",           // Internal key
+    "type_label": "Meals",        // Exact text in Oracle dropdown
+    "keywords": ["restaurant", "cafe", "food"]  // Helps LLM infer type
+  }
+]
+```
+
+The `type_label` must **exactly match** what appears in your Oracle Expenses dropdown.
+The `keywords` help the AI categorize receipts (e.g., "Starbucks" → sees "cafe" → chooses "Meals").
 
 ### 3. Page Selectors
 

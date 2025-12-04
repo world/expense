@@ -101,6 +101,14 @@ class ReceiptProcessor:
             )
         types_text = "\n".join(types_desc)
         
+        # Build dynamic examples from expense types
+        type_examples = []
+        for et in self.expense_types:
+            if et.get('keywords'):
+                examples = ', '.join(et['keywords'][:3])  # First 3 keywords as examples
+                type_examples.append(f"   - {examples} → {et['type_key']} (\"{et['type_label']}\")")
+        examples_text = "\n".join(type_examples) if type_examples else "   (Use the keywords above to infer the type)"
+        
         system_prompt = f"""You are an expert at analyzing receipt text and extracting structured expense information.
 
 Available expense types (with example keywords):
@@ -108,12 +116,8 @@ Available expense types (with example keywords):
 
 Your task:
 1. FIRST, identify the merchant/vendor name from the receipt
-2. INFER the expense type by analyzing what kind of business the merchant is:
-   - Starbucks, Dunkin, McDonald's, restaurants → MEAL
-   - Uber, Lyft, Shell, parking garages → TRANSPORT
-   - Marriott, Hilton, Airbnb → HOTEL
-   - Staples, Office Depot, paper/pens → SUPPLIES
-   - If unclear → OTHER
+2. INFER the expense type by analyzing what kind of business the merchant is, using these examples:
+{examples_text}
 3. Extract the total amount (as a number)
 4. Identify the currency (default to USD if unclear)
 5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
