@@ -1,0 +1,46 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+expense_helper.log
+
+# Config with secrets
+config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Receipts (don't commit personal data)
+receipts/
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.pdf
+
+# Playwright
+playwright-report/
+test-results/
+

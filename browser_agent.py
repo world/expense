@@ -1,0 +1,369 @@
+"""
+Playwright-based browser automation for Oracle Expenses.
+"""
+import time
+from typing import Optional, Tuple
+
+from playwright.sync_api import sync_playwright, Page, Browser, Playwright, TimeoutError as PlaywrightTimeoutError
+
+
+class OracleBrowserAgent:
+    """Manages browser automation for Oracle Expenses UI."""
+    
+    def __init__(self, config, logger=None):
+        self.config = config
+        self.logger = logger
+        self.playwright: Optional[Playwright] = None
+        self.browser: Optional[Browser] = None
+        self.page: Optional[Page] = None
+        self.is_logged_in = False
+    
+    def start(self):
+        """Start Playwright and launch browser."""
+        if self.logger:
+            self.logger.info("Starting browser...")
+        
+        self.playwright = sync_playwright().start()
+        self.browser = self.playwright.chromium.launch(headless=False)
+        self.page = self.browser.new_page()
+        
+        if self.logger:
+            self.logger.info("✅ Browser started")
+    
+    def stop(self):
+        """Close browser and cleanup."""
+        if self.page:
+            self.page.close()
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
+        
+        if self.logger:
+            self.logger.info("Browser closed")
+    
+    def navigate_to_oracle(self) -> bool:
+        """
+        Navigate to Oracle Expenses URL.
+        
+        Returns:
+            True if successful
+        """
+        url = self.config.get_oracle_url()
+        
+        if self.logger:
+            self.logger.info(f"Navigating to Oracle Expenses...")
+        
+        try:
+            self.page.goto(url, wait_until='networkidle', timeout=30000)
+            return True
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to navigate: {e}")
+            return False
+    
+    def wait_for_login(self) -> bool:
+        """
+        Wait for user to complete login if needed.
+        Polls for post-login element.
+        
+        Returns:
+            True if login detected
+        """
+        login_config = self.config.get_selector('login_detection')
+        post_login_selector = login_config.get('post_login_element')
+        timeout_ms = login_config.get('timeout_ms', 60000)
+        
+        if self.logger:
+            self.logger.info("Checking if login is required...")
+        
+        try:
+            # Check if already logged in
+            self.page.wait_for_selector(post_login_selector, timeout=5000)
+            if self.logger:
+                self.logger.info("✅ Already logged in!")
+            self.is_logged_in = True
+            return True
+        except PlaywrightTimeoutError:
+            pass
+        
+        # Need to log in
+        if self.logger:
+            self.logger.warning("⚠️  Login required. Please complete login in the browser window.")
+        
+        print("\n" + "=" * 70)
+        print("🔐 LOGIN REQUIRED")
+        print("=" * 70)
+        print("Please log in to Oracle in the browser window that just opened.")
+        print("This script will automatically continue once you're logged in.")
+        print("=" * 70 + "\n")
+        
+        # Poll for login completion
+        try:
+            self.page.wait_for_selector(post_login_selector, timeout=timeout_ms)
+            if self.logger:
+                self.logger.info("✅ Login detected!")
+            self.is_logged_in = True
+            return True
+        except PlaywrightTimeoutError:
+            if self.logger:
+                self.logger.error(f"Login timeout after {timeout_ms/1000}s")
+            return False
+    
+    def find_existing_report(self) -> Optional[str]:
+        """
+        Scan for existing unpaid/in-progress expense report.
+        
+        Returns:
+            Report identifier/selector if found, None otherwise
+        """
+        if self.logger:
+            self.logger.info("Scanning for existing in-progress reports...")
+        
+        table_config = self.config.get_selector('reports_table')
+        in_progress_statuses = table_config.get('in_progress_statuses', [])
+        
+        try:
+            # Wait for table
+            self.page.wait_for_selector(table_config['table_selector'], timeout=10000)
+            
+            # Find rows
+            rows = self.page.query_selector_all(table_config['row_selector'])
+            
+            for row in rows:
+                text = row.inner_text().lower()
+                for status in in_progress_statuses:
+                    if status.lower() in text:
+                        if self.logger:
+                            self.logger.info(f"✅ Found existing report with status: {status}")
+                        return row
+            
+            if self.logger:
+                self.logger.info("No existing in-progress reports found")
+            return None
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Could not scan for existing reports: {e}")
+            return None
+    
+    def create_new_report(self, report_name: str = None) -> bool:
+        """
+        Click to create a new expense report.
+        
+        Args:
+            report_name: Optional name for the report
+            
+        Returns:
+            True if successful
+        """
+        if self.logger:
+            self.logger.info("Creating new expense report...")
+        
+        buttons = self.config.get_selector('buttons')
+        new_report_selector = buttons.get('new_report')
+        
+        try:
+            # Click new report button
+            self.page.click(new_report_selector, timeout=10000)
+            
+            # If report name field exists, fill it
+            if report_name:
+                fields = self.config.get_selector('fields')
+                name_selector = fields.get('report_name')
+                if name_selector:
+                    try:
+                        self.page.fill(name_selector, report_name, timeout=5000)
+                    except:
+                        pass  # Name field might not be immediately visible
+            
+            if self.logger:
+                self.logger.info("✅ New report created")
+            
+            time.sleep(1)  # Brief pause for page to settle
+            return True
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to create new report: {e}")
+            return False
+    
+    def upload_receipt_attachment(self, receipt_path: str) -> bool:
+        """
+        Upload a receipt image as an attachment.
+        
+        Args:
+            receipt_path: Path to the receipt image file
+            
+        Returns:
+            True if successful
+        """
+        try:
+            fields = self.config.get_selector('fields')
+            attachment_button = fields.get('attachment_button')
+            attachment_input = fields.get('attachment_input')
+            
+            if self.logger:
+                self.logger.debug(f"Uploading attachment: {receipt_path}")
+            
+            # Click "Add Attachment" button
+            try:
+                self.page.click(attachment_button, timeout=5000)
+                time.sleep(0.5)
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Could not click attachment button: {e}")
+                # Button might not be needed, file input might be visible
+            
+            # Upload file via file input
+            # Wait for file input to be available
+            self.page.wait_for_selector(attachment_input, timeout=10000)
+            
+            # Set the file
+            self.page.set_input_files(attachment_input, receipt_path)
+            
+            # Wait a moment for upload to process
+            time.sleep(1)
+            
+            if self.logger:
+                self.logger.debug(f"✅ Attachment uploaded successfully")
+            
+            return True
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Failed to upload attachment: {e}")
+            return False
+    
+    def create_expense_item(
+        self,
+        expense_type: str,
+        amount: float,
+        date: str,
+        merchant: str,
+        description: str,
+        receipt_path: str = None,
+        is_first: bool = False
+    ) -> bool:
+        """
+        Fill and save an expense item.
+        
+        Args:
+            expense_type: Type label to select
+            amount: Expense amount
+            date: Date in DD-MM-YYYY format
+            merchant: Merchant name
+            description: Expense description
+            is_first: Whether this is the first item (needs "Create Item" click)
+            
+        Returns:
+            True if successful
+        """
+        try:
+            buttons = self.config.get_selector('buttons')
+            fields = self.config.get_selector('fields')
+            
+            # Click "Create Item" if first item
+            if is_first:
+                if self.logger:
+                    self.logger.debug("Clicking 'Create Item'...")
+                create_item_selector = buttons.get('create_item')
+                self.page.click(create_item_selector, timeout=10000)
+                time.sleep(1)
+            
+            # Fill type
+            if self.logger:
+                self.logger.debug(f"Filling type: {expense_type}")
+            type_selector = fields.get('expense_type')
+            try:
+                # Try as select dropdown first
+                self.page.select_option(type_selector, label=expense_type, timeout=5000)
+            except:
+                # Fall back to typing
+                self.page.fill(type_selector, expense_type, timeout=5000)
+                self.page.press(type_selector, 'Enter')
+            
+            # Fill amount
+            if self.logger:
+                self.logger.debug(f"Filling amount: {amount}")
+            amount_selector = fields.get('amount')
+            self.page.fill(amount_selector, str(amount), timeout=5000)
+            
+            # Fill date
+            if self.logger:
+                self.logger.debug(f"Filling date: {date}")
+            date_selector = fields.get('date')
+            self.page.fill(date_selector, date, timeout=5000)
+            
+            # Fill merchant
+            if self.logger:
+                self.logger.debug(f"Filling merchant: {merchant}")
+            merchant_selector = fields.get('merchant')
+            self.page.fill(merchant_selector, merchant, timeout=5000)
+            
+            # Fill description
+            if self.logger:
+                self.logger.debug(f"Filling description: {description}")
+            desc_selector = fields.get('description')
+            self.page.fill(desc_selector, description, timeout=5000)
+            
+            if self.logger:
+                self.logger.debug("✅ Item fields filled successfully")
+            
+            # Upload receipt attachment if provided
+            if receipt_path:
+                if self.logger:
+                    self.logger.debug("Uploading receipt attachment...")
+                upload_success = self.upload_receipt_attachment(receipt_path)
+                if not upload_success:
+                    self.logger.warning("⚠️  Attachment upload failed, but continuing...")
+            
+            return True
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Failed to fill expense item: {e}")
+            return False
+    
+    def click_create_another(self) -> bool:
+        """
+        Click 'Create Another' button to add another item.
+        
+        Returns:
+            True if button found and clicked
+        """
+        buttons = self.config.get_selector('buttons')
+        create_another_selector = buttons.get('create_another')
+        
+        try:
+            self.page.click(create_another_selector, timeout=5000)
+            time.sleep(1)
+            if self.logger:
+                self.logger.debug("Clicked 'Create Another'")
+            return True
+        except:
+            if self.logger:
+                self.logger.debug("'Create Another' button not found")
+            return False
+    
+    def click_save_and_close(self) -> bool:
+        """
+        Click 'Save and Close' button.
+        
+        Returns:
+            True if successful
+        """
+        buttons = self.config.get_selector('buttons')
+        save_close_selector = buttons.get('save_and_close')
+        
+        try:
+            self.page.click(save_close_selector, timeout=5000)
+            time.sleep(1)
+            if self.logger:
+                self.logger.info("Clicked 'Save and Close'")
+            return True
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Could not click 'Save and Close': {e}")
+            return False
+

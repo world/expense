@@ -1,0 +1,63 @@
+{
+  "llm": {
+    "api_key": "YOUR_API_KEY_HERE",
+    "model": "gpt-4",
+    "base_url": "https://api.openai.com/v1"
+  },
+  "expense_types": [
+    {
+      "type_key": "MEAL",
+      "type_label": "Meals",
+      "keywords": ["restaurant", "cafe", "coffee", "lunch", "dinner", "food"]
+    },
+    {
+      "type_key": "TRANSPORT",
+      "type_label": "Transportation",
+      "keywords": ["uber", "lyft", "taxi", "parking", "gas", "fuel", "transit"]
+    },
+    {
+      "type_key": "HOTEL",
+      "type_label": "Lodging",
+      "keywords": ["hotel", "motel", "airbnb", "lodging", "accommodation"]
+    },
+    {
+      "type_key": "SUPPLIES",
+      "type_label": "Office Supplies",
+      "keywords": ["office", "supplies", "staples", "depot", "paper"]
+    },
+    {
+      "type_key": "OTHER",
+      "type_label": "Other",
+      "keywords": []
+    }
+  ],
+  "oracle_url": "https://fa-enhs-saasfaprod1.fa.ocs.oraclecloud.com/fscmUI/faces/FndOverview?fndGlobalItemNodeId=itemNode_my_information_expenses&fnd=%3B%3B%3B%3Bfalse%3B256%3B%3B%3B&_adf.ctrl-state=rdzt2jl4j_1&_adf.no-new-window-redirect=true&_adf.no-new-window-redirect=true&_adf.no-new-window-redirect=true&_adf.no-new-window-redirect=true&_afrLoop=44064012170699970&_afrWindowMode=2&_afrWindowId=null&_afrFS=16&_afrMT=screen&_afrMFW=3440&_afrMFH=1294&_afrMFDW=3440&_afrMFDH=1440&_afrMFC=8&_afrMFCI=0&_afrMFM=0&_afrMFR=96&_afrMFG=0&_afrMFS=0&_afrMFO=0",
+  "page_selectors": {
+    "login_detection": {
+      "post_login_element": "text=My Expenses",
+      "timeout_ms": 60000
+    },
+    "reports_table": {
+      "table_selector": "table[summary*='Expense'], table[role='grid']",
+      "row_selector": "tr[role='row']",
+      "status_column_index": 3,
+      "in_progress_statuses": ["In Progress", "Saved", "Draft"]
+    },
+    "buttons": {
+      "new_report": "button:has-text('Create Report'), button:has-text('New Report')",
+      "create_item": "button:has-text('Create Item'), button:has-text('Add Item')",
+      "create_another": "button:has-text('Create Another'), button:has-text('Add Another')",
+      "save_and_close": "button:has-text('Save and Close'), button:has-text('Save & Close')"
+    },
+    "fields": {
+      "report_name": "input[name*='reportName'], input[id*='reportName']",
+      "expense_type": "select[name*='expenseType'], select[id*='expenseType'], input[name*='expenseType']",
+      "amount": "input[name*='amount'], input[id*='amount']",
+      "date": "input[name*='date'], input[id*='transactionDate']",
+      "merchant": "input[name*='merchant'], input[id*='merchant'], input[name*='vendor']",
+      "description": "textarea[name*='description'], textarea[id*='description'], input[name*='justification']",
+      "attachment_button": "button:has-text('Add Attachment'), button:has-text('Attach'), a:has-text('Add Attachment')",
+      "attachment_input": "input[type='file']"
+    }
+  }
+}
