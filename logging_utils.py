@@ -157,18 +157,41 @@ class ExpenseLogger:
         """
         total_processed = len(self.receipt_logs)
         
-        # Console summary
-        self.info("=" * 70)
-        self.info(f"SUMMARY: {total_processed} receipts processed")
+        # Console summary with detailed table
+        self.info("\n" + "=" * 120)
+        self.info("📊 EXPENSE REPORT SUMMARY")
+        self.info("=" * 120)
+        
+        if self.receipt_logs:
+            # Print header
+            self.info(f"{'#':<4} {'FILE':<25} {'DATE':<12} {'TYPE':<30} {'MERCHANT':<20} {'AMOUNT':>12}")
+            self.info("-" * 120)
+            
+            # Print each receipt
+            for receipt in self.receipt_logs:
+                idx = receipt['index']
+                filename = receipt['filename'][:24]  # Truncate if too long
+                date = receipt['date']
+                type_label = receipt['type_label'][:29]  # Truncate if too long
+                merchant = receipt['merchant'][:19]  # Truncate if too long
+                amount = receipt['total_amount']
+                currency = receipt['currency']
+                
+                self.info(f"{idx:<4} {filename:<25} {date:<12} {type_label:<30} {merchant:<20} {amount:>10.2f} {currency}")
+            
+            self.info("-" * 120)
+        
+        # Totals section
+        self.info(f"\n{'PROCESSED:':<20} {total_processed} receipts")
         
         if skipped > 0:
-            self.warning(f"{skipped} receipts skipped due to errors")
+            self.warning(f"{'SKIPPED:':<20} {skipped} receipts due to errors")
         
-        self.info("Total by currency:")
+        self.info(f"\n{'TOTAL BY CURRENCY:':}")
         for currency, total in sorted(totals_by_currency.items()):
-            self.info(f"  {currency}: {total:.2f}")
+            self.info(f"  {currency:>5}: {total:>12.2f}")
         
-        self.info("=" * 70)
+        self.info("=" * 120 + "\n")
         
         # Structured summary to log file
         summary_data = {

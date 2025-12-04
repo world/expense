@@ -344,23 +344,25 @@ Return JSON only."""
                 return data, all_warnings, ocr_text, None
             else:
                 # Check if it's a missing required field issue
-                missing_fields = []
-                for field in ['type_key', 'type_label', 'merchant', 'total_amount', 'currency']:
-                    if field not in str(llm_response):
-                        missing_fields.append(field)
-                
-                if missing_fields and attempt < max_attempts - 1:
+                if attempt < max_attempts - 1:
                     # Retry with more explicit prompt
                     if self.logger:
-                        self.logger.warning(f"LLM response missing required fields: {missing_fields}. Retrying...")
-                    messages[1]["content"] += f"\n\nIMPORTANT: Your previous response was missing these REQUIRED fields: {missing_fields}. Please include ALL required fields in your JSON response."
+                        self.logger.warning(f"⚠️  LLM response had issues. Retrying with more explicit instructions...")
+                        self.logger.debug(f"   Parse warnings: {parse_warnings}")
+                        self.logger.debug(f"   LLM response was: {llm_response[:300]}")
+                    
+                    # Add feedback about what was wrong
+                    feedback = "\n\nYour previous response had issues:\n"
+                    feedback += "\n".join(f"- {w}" for w in parse_warnings)
+                    feedback += "\n\nPlease return a VALID JSON object with ALL 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description"
+                    messages[1]["content"] += feedback
                     continue
                 else:
-                    # Final attempt failed or non-field issue
+                    # Final attempt failed
                     all_warnings.extend(parse_warnings)
-                    error_reason = f"Failed to parse LLM response after {attempt + 1} attempts. LLM returned: {llm_response[:200]}..."
-                    if parse_warnings:
-                        error_reason = f"{parse_warnings[0]} | Raw response: {llm_response[:150]}..."
+                    error_reason = f"LLM failed after {attempt + 1} attempts. Last error: {parse_warnings[0] if parse_warnings else 'Unknown'}"
+                    if self.logger:
+                        self.logger.error(f"   Final LLM response was: {llm_response}")
                     return None, all_warnings, ocr_text, error_reason
         
         return None, all_warnings, ocr_text, "Max parsing attempts exceeded"
