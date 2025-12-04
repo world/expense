@@ -85,13 +85,14 @@ INSTRUCTIONS:
 5. Generate a 2-5 word description of the purchase
 
 REQUIRED OUTPUT - Return ONLY this JSON (no markdown, no explanation):
-{{"expense_type":"<exact type from list>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
+{{"expense_type":"<exact type from list>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>","city":"<city name if visible>"}}
 
 If date is not visible, use today: {datetime.now().strftime('%d-%m-%Y')}
 If amount unclear, use 0.
+If city not visible on receipt, use empty string.
 
 Example:
-{{"expense_type":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":9.58,"currency":"USD","date":"19-11-2024","description":"Coffee and pastry"}}"""
+{{"expense_type":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":9.58,"currency":"USD","date":"19-11-2024","description":"Coffee and pastry","city":"Chicago"}}"""
     
     def call_vision_api(self, image_path: Path) -> Tuple[Optional[str], Optional[str]]:
         """Call Claude or OpenAI vision API with receipt image."""
@@ -222,8 +223,11 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
             
             data = json.loads(response_text.strip())
             
-            # Validate required fields
+            # Validate required fields (city is optional)
             required = ['expense_type', 'merchant', 'total_amount', 'currency', 'date', 'description']
+            # Ensure city field exists even if empty
+            if 'city' not in data:
+                data['city'] = ''
             missing = [f for f in required if f not in data or data[f] is None or str(data[f]).strip() == '']
             if missing:
                 warnings.append(f"Missing required fields: {missing}")

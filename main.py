@@ -287,16 +287,30 @@ def main():
                 browser_agent.stop()
                 sys.exit(1)
             
-            # Pre-analyze first receipt to get location for Purpose field
-            first_receipt_location = "Business Travel"
-            if receipt_paths:
-                logger.info("Analyzing first receipt for trip location...")
-                first_data, _, _, _ = receipt_processor.analyze_receipt(receipt_paths[0])
-                if first_data and first_data.get('merchant'):
-                    first_receipt_location = first_data.get('merchant', 'Business Travel')
+            # Get home city from config
+            home_city = config.config_data.get('home_city', '')
+            if not home_city:
+                home_city = input("Enter your home city (for expense reports): ").strip()
+                if home_city:
+                    config.config_data['home_city'] = home_city
+                    config.save_config()
+                    logger.info(f"✅ Saved home city: {home_city}")
+            
+            # Pre-analyze receipts to find first city that's NOT home city
+            trip_destination = "Business Travel"
+            logger.info("Analyzing receipts for trip destination...")
+            
+            for receipt_path in receipt_paths:
+                data, _, _, _ = receipt_processor.analyze_receipt(receipt_path)
+                if data:
+                    city = data.get('city', '').strip()
+                    if city and city.lower() != home_city.lower():
+                        trip_destination = city
+                        logger.info(f"✅ Found trip destination: {city}")
+                        break
             
             # Create new report with purpose
-            purpose = f"Trip to {first_receipt_location}"
+            purpose = f"Trip to {trip_destination}"
             if not browser_agent.create_new_report(purpose):
                 logger.error("Failed to create new report. Exiting.")
                 browser_agent.stop()
