@@ -95,22 +95,41 @@ class Config:
         
         llm = self.get_llm_config()
         
-        # Base URL first (needed to query models)
-        base_url = llm.get('base_url', 'https://api.openai.com/v1')
-        if not base_url:
-            base_url = input("Enter API Base URL [https://api.openai.com/v1]: ").strip() or "https://api.openai.com/v1"
+        # Provider selection first
+        print("\nSelect your LLM provider:")
+        print("  1. OpenAI (ChatGPT, GPT-4, etc.)")
+        print("  2. Anthropic (Claude)")
+        print("  3. Other (custom API)")
+        
+        provider_choice = input("\nChoose provider [1]: ").strip() or "1"
+        
+        # Set base URL based on provider
+        if provider_choice == "1":
+            base_url = "https://api.openai.com/v1"
+            provider_name = "OpenAI"
+        elif provider_choice == "2":
+            base_url = "https://api.anthropic.com/v1"
+            provider_name = "Anthropic"
+        elif provider_choice == "3":
+            base_url = input("Enter custom API base URL: ").strip()
+            provider_name = "Custom"
         else:
-            print(f"Using base URL: {base_url}")
-            response = input(f"Change base URL? [y/N]: ").strip().lower()
-            if response == 'y':
-                base_url = input("Enter API Base URL: ").strip()
+            # Default to OpenAI
+            base_url = "https://api.openai.com/v1"
+            provider_name = "OpenAI"
+        
+        print(f"✅ Selected: {provider_name}")
+        print(f"   Base URL: {base_url}")
         
         # API Key
         api_key = llm.get('api_key', '')
         if not api_key:
-            api_key = input("\nEnter LLM API Key: ").strip()
+            api_key = input(f"\nEnter {provider_name} API Key: ").strip()
         else:
             print(f"\nUsing existing API key: {api_key[:10]}...")
+            response = input("Use this key? [Y/n]: ").strip().lower()
+            if response == 'n':
+                api_key = input(f"Enter {provider_name} API Key: ").strip()
         
         # Fetch available models
         print("\n🔍 Fetching available models...")
