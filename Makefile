@@ -18,6 +18,7 @@ help:
 	@echo "Run commands:"
 	@echo "  make run                - Run the expense helper (normal mode)"
 	@echo "  make test               - Run in test mode (no Oracle changes)"
+	@echo "  make test-reset         - Test mode + reset LLM settings"
 	@echo "  make run-verbose        - Run with verbose/debug logging"
 	@echo ""
 	@echo "Maintenance commands:"
@@ -119,6 +120,13 @@ run-verbose:
 		exit 1; \
 	fi
 	$(VENV_PYTHON) main.py --verbose
+
+test-reset:
+	@if [ ! -d "$(VENV)" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	$(VENV_PYTHON) main.py --test --reset-llm
 
 clean:
 	@echo "Cleaning up..."

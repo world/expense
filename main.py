@@ -193,6 +193,11 @@ def main():
         help='Enable verbose/debug logging'
     )
     parser.add_argument(
+        '--reset-llm',
+        action='store_true',
+        help='Clear saved LLM settings and reconfigure from scratch'
+    )
+    parser.add_argument(
         '--config',
         default='config.json',
         help='Path to config.json (default: config.json)'
@@ -223,6 +228,18 @@ def main():
         sys.exit(1)
     
     logger.info("✅ Configuration loaded")
+    
+    # Reset LLM settings if requested
+    if args.reset_llm:
+        logger.info("🔄 Resetting LLM configuration...")
+        config.config_data['llm'] = {
+            'api_key': '',
+            'model': '',
+            'base_url': '',
+            'provider': ''
+        }
+        config.save_config()
+        logger.info("✅ LLM settings cleared. You will be prompted to reconfigure.")
     
     # Bootstrap LLM
     if not config.bootstrap_llm(logger):
