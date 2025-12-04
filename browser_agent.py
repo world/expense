@@ -479,22 +479,34 @@ class OracleBrowserAgent:
                 self.logger.info(f"📋 Filling type: {expense_type}")
             type_filled = False
             
-            # Oracle uses select element with ExpenseTypeId in the id
-            type_selector = "select[id*='ExpenseTypeId'], select[id*='expenseType' i], select[id*='type' i]"
+            type_selector = "select[id*='ExpenseTypeId']"
             
             try:
                 type_loc = self.page.locator(type_selector).first
+                if self.logger:
+                    self.logger.info("  Looking for type dropdown...")
                 type_loc.wait_for(state="visible", timeout=2000)
                 
-                # Wait for options to load (more than just the empty default)
-                for _ in range(20):  # Max 2 seconds
-                    options_count = type_loc.locator("option").count()
-                    if options_count > 1:
-                        break
-                    self.page.wait_for_timeout(100)
+                if self.logger:
+                    self.logger.info("  Found dropdown, checking options...")
                 
-                # Use select_option with the label text
-                type_loc.select_option(label=expense_type)
+                # Quick check for options
+                options_count = type_loc.locator("option").count()
+                if self.logger:
+                    self.logger.info(f"  Found {options_count} options")
+                
+                if options_count <= 1:
+                    # Wait a bit more for options to load
+                    self.page.wait_for_timeout(500)
+                    options_count = type_loc.locator("option").count()
+                    if self.logger:
+                        self.logger.info(f"  After wait: {options_count} options")
+                
+                if self.logger:
+                    self.logger.info(f"  Selecting '{expense_type}'...")
+                
+                # Use select_option with label
+                type_loc.select_option(label=expense_type, timeout=3000)
                 type_filled = True
                 if self.logger:
                     self.logger.info(f"✅ Selected type: {expense_type}")
