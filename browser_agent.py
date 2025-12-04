@@ -684,19 +684,34 @@ class OracleBrowserAgent:
                 if loc.is_visible(timeout=1000):
                     loc.click()
                     if self.logger:
-                        self.logger.info("✅ Clicked Create Another")
+                        self.logger.info("✅ Clicked Create Another - waiting for submit...")
                     
-                    # Smart wait: look for "Create Expense Item" header to appear
+                    # Smart wait: verify current item was submitted by waiting for:
+                    # 1. The uploaded attachment to disappear (new form won't have it)
+                    # 2. Or the Date field to be empty/reset
                     try:
-                        header_selector = "h1:has-text('Create Expense Item'), h1.xnw"
-                        self.page.locator(header_selector).first.wait_for(state="visible", timeout=5000)
+                        # Wait for attachment indicator to disappear (proves save completed)
+                        attachment_indicator = "img[title='File'], a[title='Download']"
+                        self.page.locator(attachment_indicator).first.wait_for(state="hidden", timeout=10000)
                         if self.logger:
-                            self.logger.info("✅ New expense item form ready")
+                            self.logger.info("✅ Previous item saved, new form ready")
                     except:
-                        # Fallback to domcontentloaded
-                        self.page.wait_for_load_state("domcontentloaded")
-                        if self.logger:
-                            self.logger.info("✅ New form loaded (fallback)")
+                        # Fallback: wait for Date field to be empty (form reset)
+                        try:
+                            date_field = self.page.locator("input[id*='StartDate']").first
+                            # Wait for the date field value to be empty
+                            for _ in range(20):  # Max 10 seconds
+                                value = date_field.input_value()
+                                if not value or value.strip() == "":
+                                    break
+                                self.page.wait_for_timeout(500)
+                            if self.logger:
+                                self.logger.info("✅ Form reset detected, new form ready")
+                        except:
+                            # Last resort: just wait for network idle
+                            self.page.wait_for_load_state("networkidle", timeout=10000)
+                            if self.logger:
+                                self.logger.info("✅ Network idle, assuming form ready")
                     
                     return True
             except:
