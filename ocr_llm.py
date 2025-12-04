@@ -242,6 +242,44 @@ Return JSON only."""
             warnings.append(f"Error parsing LLM response: {e}")
             return None, warnings
     
+    def call_llm_with_retry(self, messages: List[Dict[str, str]], max_retries: int = 3) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Call LLM with retry logic for malformed responses.
+        
+        Returns:
+            Tuple of (llm_response, error_message)
+        """
+        for attempt in range(max_retries):
+            try:
+                if self.provider == "anthropic":
+                    response = self.llm_client.messages.create(
+                        model=self.model,
+                        max_tokens=500,
+                        temperature=0,
+                        messages=[{"role": "user", "content": messages[1]["content"]}]
+                    )
+                    llm_response = response.content[0].text.strip()
+                else:
+                    response = self.llm_client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=0,
+                        max_tokens=500
+                    )
+                    llm_response = response.choices[0].message.content.strip()
+                
+                return llm_response, None
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    if self.logger:
+                        self.logger.warning(f"LLM call attempt {attempt + 1} failed, retrying...")
+                    continue
+                else:
+                    return None, f"LLM API call failed after {max_retries} attempts: {str(e)}"
+        
+        return None, "Max retries exceeded"
+    
     def analyze_receipt(self, image_path: Path) -> Tuple[Optional[Dict[str, Any]], List[str], str, Optional[str]]:
         """
         Full pipeline: OCR + LLM analysis of a receipt.
@@ -267,56 +305,52 @@ Return JSON only."""
         # Step 2: Build LLM prompt
         messages = self.build_llm_prompt(ocr_text)
         
-        # Step 3: Call LLM
-        try:
+        # Step 3: Call LLM with retry for missing fields
+        max_attempts = 3
+        for attempt in range(max_attempts):
             if self.logger:
-                self.logger.debug(f"Calling LLM for {image_path.name}...")
+                self.logger.debug(f"Calling LLM for {image_path.name}... (attempt {attempt + 1}/{max_attempts})")
             
-            if self.provider == "anthropic":
-                # Use Anthropic API format
-                response = self.llm_client.messages.create(
-                    model=self.model,
-                    max_tokens=500,
-                    temperature=0,
-                    messages=[{"role": "user", "content": messages[1]["content"]}]  # Use user message only
-                )
-                
-                # Anthropic returns content differently
-                llm_response = response.content[0].text.strip()
-            else:
-                # Use OpenAI API format
-                response = self.llm_client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0,
-                    max_tokens=500
-                )
-                
-                llm_response = response.choices[0].message.content.strip()
+            llm_response, error = self.call_llm_with_retry(messages)
+            
+            if error:
+                error_reason = error
+                all_warnings.append(error_reason)
+                if self.logger:
+                    self.logger.error(error_reason)
+                return None, all_warnings, ocr_text, error_reason
             
             if self.logger:
                 self.logger.debug(f"LLM response received ({len(llm_response)} chars)")
             
-        except Exception as e:
-            error_reason = f"LLM API call failed: {str(e)}"
-            all_warnings.append(error_reason)
-            if self.logger:
-                self.logger.error(error_reason)
-            return None, all_warnings, ocr_text, error_reason
+            # Step 4: Parse response
+            data, parse_warnings = self.parse_llm_response(llm_response)
+            
+            if data:
+                # Success! All required fields present
+                data['_raw_llm_response'] = llm_response
+                return data, all_warnings, ocr_text, None
+            else:
+                # Check if it's a missing required field issue
+                missing_fields = []
+                for field in ['type_key', 'type_label', 'merchant', 'total_amount', 'currency']:
+                    if field not in str(llm_response):
+                        missing_fields.append(field)
+                
+                if missing_fields and attempt < max_attempts - 1:
+                    # Retry with more explicit prompt
+                    if self.logger:
+                        self.logger.warning(f"LLM response missing required fields: {missing_fields}. Retrying...")
+                    messages[1]["content"] += f"\n\nIMPORTANT: Your previous response was missing these REQUIRED fields: {missing_fields}. Please include ALL required fields in your JSON response."
+                    continue
+                else:
+                    # Final attempt failed or non-field issue
+                    all_warnings.extend(parse_warnings)
+                    error_reason = f"Failed to parse LLM response after {attempt + 1} attempts. LLM returned: {llm_response[:200]}..."
+                    if parse_warnings:
+                        error_reason = f"{parse_warnings[0]} | Raw response: {llm_response[:150]}..."
+                    return None, all_warnings, ocr_text, error_reason
         
-        # Step 4: Parse response
-        data, parse_warnings = self.parse_llm_response(llm_response)
-        all_warnings.extend(parse_warnings)
-        
-        if data:
-            # Add raw response for verbose logging
-            data['_raw_llm_response'] = llm_response
-            return data, all_warnings, ocr_text, None
-        else:
-            # Parsing failed - capture the specific reason
-            error_reason = f"Failed to parse LLM response. LLM returned: {llm_response[:200]}..."
-            if parse_warnings:
-                error_reason = f"{parse_warnings[0]} | Raw response: {llm_response[:150]}..."
-            return None, all_warnings, ocr_text, error_reason
+        return None, all_warnings, ocr_text, "Max parsing attempts exceeded"
 
 
