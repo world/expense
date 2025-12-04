@@ -269,18 +269,33 @@ class OracleBrowserAgent:
             self.logger.info("🆕 Creating new expense report...")
         
         try:
-            # Race all selectors at once for Create Report button
-            create_selector = "text=Create Report, button:has-text('Create Report'), a:has-text('Create Report'), [aria-label*='Create Report']"
+            # Oracle uses SVG with aria-label and span with class for "Create Report"
+            create_selectors = [
+                "svg[aria-label='Create Report']",
+                "a:has(svg[aria-label='Create Report'])",
+                "span.expense-report-card-title:has-text('Create Report')",
+                "a.xmx:has(svg)",
+                "text=Create Report",
+                "[aria-label='Create Report']",
+                "[title='Create Report']"
+            ]
             
-            try:
-                loc = self.page.locator(create_selector).first
-                loc.wait_for(state="visible", timeout=3000)
-                loc.click()
+            clicked = False
+            for selector in create_selectors:
+                try:
+                    loc = self.page.locator(selector).first
+                    if loc.is_visible(timeout=500):
+                        loc.click()
+                        clicked = True
+                        if self.logger:
+                            self.logger.info(f"✅ Clicked Create Report")
+                        break
+                except:
+                    continue
+            
+            if not clicked:
                 if self.logger:
-                    self.logger.info("✅ Clicked Create Report")
-            except Exception as e:
-                if self.logger:
-                    self.logger.error(f"Could not find Create Report button: {e}")
+                    self.logger.error("Could not find Create Report button")
                 return False
             
             # Smart wait: wait for page to be ready (network idle or form element visible)
