@@ -207,7 +207,7 @@ class OracleBrowserAgent:
             
             try:
                 self.page.click(create_item_selector, timeout=10000)
-                time.sleep(2)  # Wait for form to load
+                self.page.wait_for_load_state("domcontentloaded")
             except:
                 if self.logger:
                     self.logger.warning("Could not click Create Item for scraping, trying anyway...")
@@ -230,7 +230,7 @@ class OracleBrowserAgent:
                 try:
                     # Click to open dropdown
                     self.page.click(type_selector, timeout=5000)
-                    time.sleep(1)
+                    self.page.wait_for_timeout(300)  # Brief Playwright wait for dropdown animation
                     
                     # Look for list items
                     dropdown_items = self.page.query_selector_all("li[role='option'], div[role='option'], a[role='option']")
@@ -269,72 +269,47 @@ class OracleBrowserAgent:
             self.logger.info("🆕 Creating new expense report...")
         
         try:
-            # Try multiple selectors for the Create Report button
-            create_selectors = [
-                "text=Create Report",
-                "button:has-text('Create Report')",
-                "a:has-text('Create Report')",
-                "[aria-label*='Create Report']",
-                ".create-report"
-            ]
+            # Race all selectors at once for Create Report button
+            create_selector = "text=Create Report, button:has-text('Create Report'), a:has-text('Create Report'), [aria-label*='Create Report']"
             
-            clicked = False
-            for selector in create_selectors:
-                try:
-                    if self.page.locator(selector).first.is_visible(timeout=2000):
-                        self.page.locator(selector).first.click()
-                        clicked = True
-                        if self.logger:
-                            self.logger.info(f"✅ Clicked Create Report")
-                        break
-                except:
-                    continue
-            
-            if not clicked:
+            try:
+                loc = self.page.locator(create_selector).first
+                loc.wait_for(state="visible", timeout=3000)
+                loc.click()
                 if self.logger:
-                    self.logger.error("Could not find Create Report button")
+                    self.logger.info("✅ Clicked Create Report")
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(f"Could not find Create Report button: {e}")
                 return False
             
-            # Wait for the Create Expense Report form to load
-            time.sleep(2)
+            # Smart wait: wait for page to be ready (network idle or form element visible)
+            self.page.wait_for_load_state("domcontentloaded")
             
             # Fill in the Purpose field
             if purpose:
-                purpose_selectors = [
-                    "input[id*='purpose' i]",
-                    "input[name*='purpose' i]",
-                    "input[aria-label*='Purpose' i]",
-                    "label:has-text('Purpose') + input",
-                    "label:has-text('Purpose') ~ input",
-                    "//label[contains(text(),'Purpose')]/following::input[1]"
-                ]
+                purpose_selector = "input[id*='purpose' i], input[name*='purpose' i], input[aria-label*='Purpose' i]"
                 
-                filled = False
-                for selector in purpose_selectors:
-                    try:
-                        if selector.startswith("//"):
-                            # XPath
-                            loc = self.page.locator(f"xpath={selector}")
-                        else:
-                            loc = self.page.locator(selector)
-                        
-                        if loc.first.is_visible(timeout=2000):
-                            loc.first.fill(purpose)
-                            filled = True
-                            if self.logger:
-                                self.logger.info(f"✅ Filled Purpose: {purpose}")
-                            break
-                    except:
-                        continue
-                
-                if not filled:
+                try:
+                    loc = self.page.locator(purpose_selector).first
+                    loc.wait_for(state="visible", timeout=3000)
+                    loc.fill(purpose)
                     if self.logger:
-                        self.logger.warning("Could not find Purpose field, continuing anyway...")
+                        self.logger.info(f"✅ Filled Purpose: {purpose}")
+                except:
+                    # Try XPath as fallback
+                    try:
+                        loc = self.page.locator("xpath=//label[contains(text(),'Purpose')]/following::input[1]").first
+                        loc.wait_for(state="visible", timeout=1000)
+                        loc.fill(purpose)
+                        if self.logger:
+                            self.logger.info(f"✅ Filled Purpose: {purpose}")
+                    except:
+                        if self.logger:
+                            self.logger.warning("Could not find Purpose field, continuing anyway...")
             
             if self.logger:
                 self.logger.info("✅ New report form ready")
-            
-            time.sleep(1)  # Brief pause for page to settle
             return True
             
         except Exception as e:
@@ -363,7 +338,6 @@ class OracleBrowserAgent:
             # Click "Add Attachment" button
             try:
                 self.page.click(attachment_button, timeout=5000)
-                time.sleep(0.5)
             except Exception as e:
                 if self.logger:
                     self.logger.warning(f"Could not click attachment button: {e}")
@@ -376,8 +350,8 @@ class OracleBrowserAgent:
             # Set the file
             self.page.set_input_files(attachment_input, receipt_path)
             
-            # Wait a moment for upload to process
-            time.sleep(1)
+            # Smart wait for upload to process - wait for any upload indicator to disappear
+            self.page.wait_for_load_state("networkidle", timeout=10000)
             
             if self.logger:
                 self.logger.debug(f"✅ Attachment uploaded successfully")
@@ -422,34 +396,22 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.info("Clicking 'Create Item'...")
                 
-                # Try multiple selectors for Create Item button
-                create_item_selectors = [
-                    "text=Create Item",
-                    "button:has-text('Create Item')",
-                    "a:has-text('Create Item')",
-                    "[aria-label*='Create Item']",
-                    "span:has-text('Create Item')"
-                ]
+                # Race all Create Item selectors at once
+                create_item_selector = "text=Create Item, button:has-text('Create Item'), a:has-text('Create Item'), [aria-label*='Create Item']"
                 
-                clicked = False
-                for selector in create_item_selectors:
-                    try:
-                        loc = self.page.locator(selector).first
-                        if loc.is_visible(timeout=2000):
-                            loc.click()
-                            clicked = True
-                            if self.logger:
-                                self.logger.info("✅ Clicked Create Item")
-                            break
-                    except:
-                        continue
-                
-                if not clicked:
+                try:
+                    loc = self.page.locator(create_item_selector).first
+                    loc.wait_for(state="visible", timeout=3000)
+                    loc.click()
                     if self.logger:
-                        self.logger.error("Could not find Create Item button")
+                        self.logger.info("✅ Clicked Create Item")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.error(f"Could not find Create Item button: {e}")
                     return False
                 
-                time.sleep(2)  # Wait for form to load
+                # Smart wait: wait for form to load (date field visible)
+                self.page.wait_for_load_state("domcontentloaded")
             
             # Fill Date field
             if self.logger:
@@ -476,65 +438,53 @@ class OracleBrowserAgent:
             if not date_filled and self.logger:
                 self.logger.warning("Could not fill Date field")
             
-            # Wait for type dropdown to populate after date entry
-            time.sleep(0.5)
-            
-            # Fill Type dropdown
+            # Fill Type dropdown - wait for it to be enabled after date entry
             if self.logger:
                 self.logger.info(f"📋 Filling type: {expense_type}")
             type_filled = False
             
-            # Oracle uses a custom LOV (List of Values) dropdown
-            # Try to find and click the Type field to open dropdown
-            type_field_selectors = [
-                "input[id*='xpenseType' i]",
-                "input[id*='type' i]",
-                "[id*='type' i][role='combobox']",
-                "//label[contains(text(),'Type')]/following::input[1]"
-            ]
+            type_selector = "input[id*='xpenseType' i], input[id*='type' i], [id*='type' i][role='combobox']"
             
-            for sel in type_field_selectors:
+            try:
+                type_loc = self.page.locator(type_selector).first
+                # Smart wait: wait for element to be enabled (not just visible)
+                type_loc.wait_for(state="visible", timeout=2000)
+                
+                # Wait until enabled (polling)
+                for _ in range(10):  # Max 1 second (10 x 100ms)
+                    if type_loc.is_enabled():
+                        break
+                    self.page.wait_for_timeout(100)  # Playwright's non-blocking wait
+                
+                type_loc.click()
+                type_loc.fill(expense_type)
+                
+                # Try to click matching option or press Enter
+                option_selector = f"li:has-text('{expense_type}'), [role='option']:has-text('{expense_type}')"
                 try:
-                    if sel.startswith("//"):
-                        loc = self.page.locator(f"xpath={sel}").first
-                    else:
-                        loc = self.page.locator(sel).first
-                    
-                    if loc.is_visible(timeout=200):  # Very quick check
-                        loc.click()
-                        time.sleep(0.2)  # Brief wait for dropdown
-                        
-                        # Type to filter and select
-                        loc.fill(expense_type)
-                        time.sleep(0.2)
-                        
-                        # Press Enter or Tab to confirm, or click matching option
-                        try:
-                            option = self.page.locator(f"li:has-text('{expense_type}'), [role='option']:has-text('{expense_type}')").first
-                            if option.is_visible(timeout=500):
-                                option.click()
-                                type_filled = True
-                                break
-                        except:
-                            # Try pressing Enter to confirm
-                            loc.press("Enter")
-                            type_filled = True
-                            break
+                    option = self.page.locator(option_selector).first
+                    option.wait_for(state="visible", timeout=500)
+                    option.click()
+                    type_filled = True
                 except:
-                    continue
+                    type_loc.press("Enter")
+                    type_filled = True
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Type fill error: {e}")
             
             if not type_filled and self.logger:
                 self.logger.warning("Could not fill Type field")
             
-            # Find Amount field and CLICK into it (this triggers attachments to appear)
+            # Click into Amount box
             if self.logger:
                 self.logger.info(f"💵 Clicking into Amount field...")
-            amount_loc = None
             amount_selectors = [
                 "input[id*='amount' i]",
                 "input[name*='amount' i]",
                 "//label[contains(text(),'Amount')]/following::input[1]"
             ]
+            amount_loc = None
             for sel in amount_selectors:
                 try:
                     if sel.startswith("//"):
@@ -542,42 +492,13 @@ class OracleBrowserAgent:
                     else:
                         loc = self.page.locator(sel).first
                     if loc.is_visible(timeout=500):
-                        loc.click()  # Just click, don't fill yet
+                        loc.click()
                         amount_loc = loc
                         break
                 except:
                     continue
             
-            # Now wait for attachments section to appear
-            if self.logger:
-                self.logger.info("⏳ Waiting for attachments section...")
-            attachment_selectors = [
-                "text=Attachments",
-                "button:has-text('Add Attachment')",
-                "button:has-text('Attach')",
-                "input[type='file']"
-            ]
-            attachment_appeared = False
-            try:
-                combined_selector = ", ".join(attachment_selectors)
-                self.page.locator(combined_selector).first.wait_for(state="visible", timeout=3000)
-                attachment_appeared = True
-                if self.logger:
-                    self.logger.info("✅ Attachments section appeared")
-            except:
-                if self.logger:
-                    self.logger.info("⏳ Attachments not detected, brief wait...")
-                time.sleep(0.5)
-            
-            # Upload receipt attachment
-            if receipt_path:
-                if self.logger:
-                    self.logger.info("📎 Uploading receipt attachment...")
-                upload_success = self.upload_receipt_attachment(receipt_path)
-                if not upload_success:
-                    self.logger.warning("⚠️  Attachment upload failed, but continuing...")
-            
-            # Now fill the Amount value
+            # Fill Amount value
             if self.logger:
                 self.logger.info(f"💵 Filling amount: {amount}")
             amount_filled = False
@@ -588,20 +509,39 @@ class OracleBrowserAgent:
                 except:
                     pass
             
-            # Fallback if we didn't have the locator saved
-            if not amount_filled:
-                for sel in amount_selectors:
-                    try:
-                        if sel.startswith("//"):
-                            loc = self.page.locator(f"xpath={sel}").first
-                        else:
-                            loc = self.page.locator(sel).first
-                        if loc.is_visible(timeout=500):
-                            loc.fill(str(amount))
-                            amount_filled = True
-                            break
-                    except:
-                        continue
+            if not amount_filled and self.logger:
+                self.logger.warning("Could not fill Amount field")
+            
+            # Now check if Attachments have appeared
+            if self.logger:
+                self.logger.info("⏳ Checking for attachments section...")
+            attachment_selectors = [
+                "text=Attachments",
+                "button:has-text('Add Attachment')",
+                "button:has-text('Attach')",
+                "input[type='file']"
+            ]
+            attachment_appeared = False
+            try:
+                combined_selector = ", ".join(attachment_selectors)
+                self.page.locator(combined_selector).first.wait_for(state="visible", timeout=2000)
+                attachment_appeared = True
+                if self.logger:
+                    self.logger.info("✅ Attachments section appeared")
+            except:
+                if self.logger:
+                    self.logger.info("⏳ Attachments not visible yet")
+            
+            # Upload receipt attachment if section appeared
+            if receipt_path and attachment_appeared:
+                if self.logger:
+                    self.logger.info("📎 Uploading receipt attachment...")
+                upload_success = self.upload_receipt_attachment(receipt_path)
+                if not upload_success:
+                    self.logger.warning("⚠️  Attachment upload failed, but continuing...")
+            elif receipt_path and not attachment_appeared:
+                if self.logger:
+                    self.logger.warning("⚠️  Attachments section not found, skipping upload")
             
             if not amount_filled and self.logger:
                 self.logger.warning("Could not fill Amount field")
@@ -626,32 +566,20 @@ class OracleBrowserAgent:
         if self.logger:
             self.logger.info("➕ Clicking 'Create Another'...")
         
-        create_another_selectors = [
-            "text=Create Another",
-            "button:has-text('Create Another')",
-            "a:has-text('Create Another')",
-            "input[value*='Create Another']"
-        ]
+        create_another_selector = "text=Create Another, button:has-text('Create Another'), a:has-text('Create Another')"
         
         try:
-            for selector in create_another_selectors:
-                try:
-                    loc = self.page.locator(selector).first
-                    if loc.is_visible(timeout=2000):
-                        loc.click()
-                        if self.logger:
-                            self.logger.info("✅ Clicked Create Another")
-                        time.sleep(2)
-                        return True
-                except:
-                    continue
-            
+            loc = self.page.locator(create_another_selector).first
+            loc.wait_for(state="visible", timeout=3000)
+            loc.click()
             if self.logger:
-                self.logger.warning("Could not find 'Create Another' button")
-            return False
+                self.logger.info("✅ Clicked Create Another")
+            # Smart wait for form to be ready
+            self.page.wait_for_load_state("domcontentloaded")
+            return True
         except Exception as e:
             if self.logger:
-                self.logger.warning(f"Create Another failed: {e}")
+                self.logger.warning(f"Could not find 'Create Another' button: {e}")
             return False
     
     def click_save_and_close(self) -> bool:
@@ -664,33 +592,20 @@ class OracleBrowserAgent:
         if self.logger:
             self.logger.info("💾 Clicking 'Save and Close'...")
         
-        save_selectors = [
-            "text=Save and Close",
-            "button:has-text('Save and Close')",
-            "button:has-text('Save & Close')",
-            "a:has-text('Save and Close')",
-            "input[value*='Save']"
-        ]
+        save_selector = "text=Save and Close, button:has-text('Save and Close'), button:has-text('Save & Close'), a:has-text('Save and Close')"
         
         try:
-            for selector in save_selectors:
-                try:
-                    loc = self.page.locator(selector).first
-                    if loc.is_visible(timeout=2000):
-                        loc.click()
-                        if self.logger:
-                            self.logger.info("✅ Clicked Save and Close")
-                        time.sleep(2)
-                        return True
-                except:
-                    continue
-            
+            loc = self.page.locator(save_selector).first
+            loc.wait_for(state="visible", timeout=3000)
+            loc.click()
             if self.logger:
-                self.logger.warning("Could not find 'Save and Close' button")
-            return False
+                self.logger.info("✅ Clicked Save and Close")
+            # Smart wait for save to complete
+            self.page.wait_for_load_state("domcontentloaded")
+            return True
         except Exception as e:
             if self.logger:
-                self.logger.warning(f"Save and Close failed: {e}")
+                self.logger.warning(f"Could not find 'Save and Close' button: {e}")
             return False
     
 
