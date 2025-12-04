@@ -552,21 +552,26 @@ class OracleBrowserAgent:
             if self.logger:
                 self.logger.info("⏳ Waiting for attachments dropzone (appears after type)...")
             
-            # Oracle uses FndDropzone class for attachments
+            # Oracle dropzone has id containing pglDropZone or cilDzMsg
             dropzone_selectors = [
+                "[id*='pglDropZone']",
+                "[id*='cilDzMsg']",
                 "div.FndDropzone",
-                "a[title='Add File']",
-                "img[title*='Drag files']",
-                "text=Drag files here or click to add attachment"
+                "a[title='Add File']"
             ]
             attachment_appeared = False
-            try:
-                combined_selector = ", ".join(dropzone_selectors)
-                self.page.locator(combined_selector).first.wait_for(state="visible", timeout=3000)
-                attachment_appeared = True
-                if self.logger:
-                    self.logger.info("✅ Attachments dropzone appeared")
-            except:
+            for sel in dropzone_selectors:
+                try:
+                    loc = self.page.locator(sel).first
+                    loc.wait_for(state="visible", timeout=2000)
+                    attachment_appeared = True
+                    if self.logger:
+                        self.logger.info(f"✅ Attachments dropzone appeared (found via {sel})")
+                    break
+                except:
+                    continue
+            
+            if not attachment_appeared:
                 if self.logger:
                     self.logger.info("⏳ Attachments dropzone not visible yet")
             
