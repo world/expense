@@ -111,23 +111,27 @@ Your task:
 2. Extract the merchant/vendor name
 3. Extract the total amount (as a number)
 4. Identify the currency (default to USD if unclear)
-5. Extract the transaction date (in YYYY-MM-DD format)
+5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
 6. Generate a concise description (max 50 chars)
 
-Return ONLY valid JSON with this exact structure:
+CRITICAL: Return ONLY valid JSON with ALL of these REQUIRED fields:
 {{
   "type_key": "MEAL",
   "type_label": "Meals",
   "merchant": "Chipotle Mexican Grill",
   "total_amount": 42.10,
   "currency": "USD",
-  "date": "2025-01-15",
+  "date": "15-01-2025",
   "description": "Team lunch"
 }}
 
-If you cannot find a date, set date to null.
-If you cannot determine amount, set it to 0.
-Always return valid JSON, nothing else."""
+IMPORTANT RULES:
+- ALL fields are REQUIRED (type_key, type_label, merchant, total_amount, currency, date, description)
+- Date MUST be in DD-MM-YYYY format (day-month-year), e.g., "15-01-2025" not "01/15/2025"
+- If you cannot find a date, set date to null
+- If you cannot determine amount, set total_amount to 0
+- type_key must be one of: {', '.join([et['type_key'] for et in self.expense_types])}
+- Return ONLY the JSON object, no markdown code blocks, no extra text"""
 
         user_prompt = f"""Analyze this receipt text and extract expense information:
 
@@ -195,15 +199,34 @@ Return JSON only."""
                 data['description'] = f"{data['merchant']} - {data['type_label']}"
                 warnings.append("Generated description from merchant and type")
             
-            # Parse date if present
+            # Parse and normalize date if present
             date_value = data.get('date')
-            if date_value:
+            if date_value and date_value != 'null':
                 try:
-                    # Try to parse as ISO date
-                    parsed_date = datetime.fromisoformat(str(date_value))
-                    data['date'] = parsed_date.strftime('%d-%m-%Y')
-                except (ValueError, TypeError):
-                    warnings.append(f"Could not parse date: {date_value}")
+                    # Remove any None or 'null' string values
+                    if str(date_value).lower() == 'null':
+                        data['date'] = None
+                    else:
+                        # Try multiple date formats
+                        date_str = str(date_value)
+                        parsed_date = None
+                        
+                        # Try DD-MM-YYYY (target format)
+                        for fmt in ['%d-%m-%Y', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y']:
+                            try:
+                                parsed_date = datetime.strptime(date_str, fmt)
+                                break
+                            except ValueError:
+                                continue
+                        
+                        if parsed_date:
+                            # Always convert to DD-MM-YYYY format
+                            data['date'] = parsed_date.strftime('%d-%m-%Y')
+                        else:
+                            warnings.append(f"Could not parse date: {date_value}")
+                            data['date'] = None
+                except (ValueError, TypeError) as e:
+                    warnings.append(f"Date parsing error: {e}")
                     data['date'] = None
             else:
                 data['date'] = None
