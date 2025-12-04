@@ -92,32 +92,35 @@ class ReceiptProcessor:
         Returns:
             List of message dicts for OpenAI chat completion
         """
-        # Build expense types description
-        types_desc = []
+        # Build clean list of expense types
+        types_list = []
         for et in self.expense_types:
-            keywords_str = ", ".join(et.get('keywords', []))
-            types_desc.append(
-                f"- {et['type_key']} (\"{et['type_label']}\"): {keywords_str}"
-            )
-        types_text = "\n".join(types_desc)
-        
-        # Build dynamic examples from expense types
-        type_examples = []
-        for et in self.expense_types:
-            if et.get('keywords'):
-                examples = ', '.join(et['keywords'][:3])  # First 3 keywords as examples
-                type_examples.append(f"   - {examples} → {et['type_key']} (\"{et['type_label']}\")")
-        examples_text = "\n".join(type_examples) if type_examples else "   (Use the keywords above to infer the type)"
+            types_list.append(f"  - {et['type_key']}: \"{et['type_label']}\"")
+        types_text = "\n".join(types_list)
         
         system_prompt = f"""You are an expert at analyzing receipt text and extracting structured expense information.
 
-Available expense types (with example keywords):
+Available expense types:
 {types_text}
 
 Your task:
 1. FIRST, identify the merchant/vendor name from the receipt
-2. INFER the expense type by analyzing what kind of business the merchant is, using these examples:
-{examples_text}
+2. INFER the most appropriate expense type based on what kind of business the merchant is:
+   - Coffee shops (Starbucks, Dunkin) → Meals-Breakfast and Tip
+   - Lunch places (Chipotle, Subway) → Meals-Lunch and Tip
+   - Restaurants (dinner) → Meals-Dinner and Tip
+   - Airlines → Travel-Airfare
+   - Hotels → Travel-Hotel Accommodation
+   - Uber/Lyft → Travel-Non-Car Rental Ground Transport
+   - Gas stations → Travel-Gasoline
+   - Parking → Travel-Parking And Tolls
+   - Taxis → Taxi
+   - Office stores → Office And Print Supplies
+   - Software/subscriptions → Software
+   - Phone carriers → Mobile Phone
+   - Shipping services → Shipping
+   - Training/courses → Training
+   - If unclear → Miscellaneous Other
 3. Extract the total amount (as a number)
 4. Identify the currency (default to USD if unclear)
 5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
