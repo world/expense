@@ -161,20 +161,20 @@ class ExpenseLogger:
         
         if self.receipt_logs:
             # Print header
-            print(f"{'#':<4} {'FILE':<25} {'DATE':<12} {'TYPE':<30} {'MERCHANT':<20} {'AMOUNT':>12}")
-            print("-" * 120)
+            print(f"{'#':<3} {'DATE':<12} {'TYPE':<32} {'MERCHANT':<22} {'DESCRIPTION':<25} {'AMOUNT':>12}")
+            print("-" * 115)
             
             # Print each receipt
             for receipt in self.receipt_logs:
                 idx = receipt['index']
-                filename = receipt['filename'][:24]  # Truncate if too long
                 date = receipt['date']
-                type_label = receipt['expense_type'][:29]  # Truncate if too long
-                merchant = receipt['merchant'][:19]  # Truncate if too long
+                type_label = receipt['expense_type'][:31]  # Truncate if too long
+                merchant = receipt['merchant'][:21]  # Truncate if too long
+                description = receipt['description'][:24]  # Truncate if too long
                 amount = receipt['total_amount']
                 currency = receipt['currency']
                 
-                print(f"{idx:<4} {filename:<25} {date:<12} {type_label:<30} {merchant:<20} {amount:>10.2f} {currency}")
+                print(f"{idx:<3} {date:<12} {type_label:<32} {merchant:<22} {description:<25} {amount:>10.2f} {currency}")
             
             print("-" * 120)
         

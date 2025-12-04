@@ -61,19 +61,28 @@ AVAILABLE EXPENSE TYPES (use exactly as shown):
 INSTRUCTIONS:
 1. Read the receipt carefully - look for merchant name, date, and total amount
 2. Match the merchant to the most appropriate expense type:
-   - Coffee shops (Starbucks, Dunkin, etc.) → MEALS_BREAKFAST
-   - Lunch places (Chipotle, Subway, etc.) → MEALS_LUNCH  
-   - Dinner restaurants → MEALS_DINNER
-   - Uber/Lyft/rideshare → TRAVEL_GROUND_TRANSPORT
-   - Gas stations → TRAVEL_GASOLINE
-   - Parking → TRAVEL_PARKING
-   - Hotels → TRAVEL_HOTEL
-   - Airlines → TRAVEL_AIRFARE
-   - Taxis → TAXI
-   - If unclear → MISC_OTHER
+   
+   HOTELS (Westin, Marriott, Hilton, Hyatt, IHG, etc.):
+   - Room charges, lodging, accommodation → "Travel-Hotel Accommodation"
+   - Even if breakfast is included, if it's a hotel folio/bill → "Travel-Hotel Accommodation"
+   
+   MEALS (only for standalone restaurants/cafes):
+   - Coffee shops (Starbucks, Dunkin, etc.) → "Meals-Breakfast and Tip"
+   - Lunch places (Chipotle, Subway, etc.) → "Meals-Lunch and Tip"  
+   - Dinner restaurants → "Meals-Dinner and Tip"
+   
+   TRANSPORTATION:
+   - Uber/Lyft/rideshare → "Travel-Non-Car Rental Ground Transport"
+   - Gas stations → "Travel-Gasoline"
+   - Parking → "Travel-Parking And Tolls"
+   - Airlines → "Travel-Airfare"
+   - Taxis → "Taxi"
+   
+   - If unclear → "Miscellaneous Other"
+
 3. Extract the EXACT date shown on receipt in DD-MM-YYYY format
 4. Extract the total/final amount (not subtotal)
-5. Generate a 2-5 word description
+5. Generate a 2-5 word description of the purchase
 
 REQUIRED OUTPUT - Return ONLY this JSON (no markdown, no explanation):
 {{"expense_type":"<exact type from list>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
