@@ -246,12 +246,12 @@ class OracleBrowserAgent:
                 self.logger.warning(f"Failed to scrape expense types: {e}")
             return []
     
-    def create_new_report(self, report_name: str = None) -> bool:
+    def create_new_report(self, purpose: str = None) -> bool:
         """
-        Click to create a new expense report.
+        Click to create a new expense report and fill in Purpose.
         
         Args:
-            report_name: Optional name for the report
+            purpose: Purpose/description for the report (e.g., "Trip to Chicago")
             
         Returns:
             True if successful
@@ -286,18 +286,44 @@ class OracleBrowserAgent:
                     self.logger.error("Could not find Create Report button")
                 return False
             
-            # If report name field exists, fill it
-            if report_name:
-                fields = self.config.get_selector('fields')
-                name_selector = fields.get('report_name')
-                if name_selector:
+            # Wait for the Create Expense Report form to load
+            time.sleep(2)
+            
+            # Fill in the Purpose field
+            if purpose:
+                purpose_selectors = [
+                    "input[id*='purpose' i]",
+                    "input[name*='purpose' i]",
+                    "input[aria-label*='Purpose' i]",
+                    "label:has-text('Purpose') + input",
+                    "label:has-text('Purpose') ~ input",
+                    "//label[contains(text(),'Purpose')]/following::input[1]"
+                ]
+                
+                filled = False
+                for selector in purpose_selectors:
                     try:
-                        self.page.fill(name_selector, report_name, timeout=5000)
+                        if selector.startswith("//"):
+                            # XPath
+                            loc = self.page.locator(f"xpath={selector}")
+                        else:
+                            loc = self.page.locator(selector)
+                        
+                        if loc.first.is_visible(timeout=2000):
+                            loc.first.fill(purpose)
+                            filled = True
+                            if self.logger:
+                                self.logger.info(f"✅ Filled Purpose: {purpose}")
+                            break
                     except:
-                        pass  # Name field might not be immediately visible
+                        continue
+                
+                if not filled:
+                    if self.logger:
+                        self.logger.warning("Could not find Purpose field, continuing anyway...")
             
             if self.logger:
-                self.logger.info("✅ New report created")
+                self.logger.info("✅ New report form ready")
             
             time.sleep(1)  # Brief pause for page to settle
             return True

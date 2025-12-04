@@ -287,22 +287,20 @@ def main():
                 browser_agent.stop()
                 sys.exit(1)
             
-            # Check for existing report or create new
-            existing = browser_agent.find_existing_report()
-            if existing:
-                logger.info("Using existing in-progress report")
-                # Click into it
-                try:
-                    existing.click()
-                except:
-                    pass
-            else:
-                # Create new report
-                report_name = f"Expenses {receipt_paths[0].stem if receipt_paths else 'Report'}"
-                if not browser_agent.create_new_report(report_name):
-                    logger.error("Failed to create new report. Exiting.")
-                    browser_agent.stop()
-                    sys.exit(1)
+            # Pre-analyze first receipt to get location for Purpose field
+            first_receipt_location = "Business Travel"
+            if receipt_paths:
+                logger.info("Analyzing first receipt for trip location...")
+                first_data, _, _, _ = receipt_processor.analyze_receipt(receipt_paths[0])
+                if first_data and first_data.get('merchant'):
+                    first_receipt_location = first_data.get('merchant', 'Business Travel')
+            
+            # Create new report with purpose
+            purpose = f"Trip to {first_receipt_location}"
+            if not browser_agent.create_new_report(purpose):
+                logger.error("Failed to create new report. Exiting.")
+                browser_agent.stop()
+                sys.exit(1)
             
             # Skip scraping - use expense types from config.json
             logger.info(f"Using {len(config.get_expense_types())} expense types from config.json")
