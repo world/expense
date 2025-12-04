@@ -681,11 +681,17 @@ class OracleBrowserAgent:
         for selector in create_another_selectors:
             try:
                 loc = self.page.locator(selector).first
-                if loc.is_visible(timeout=500):
+                if loc.is_visible(timeout=1000):
                     loc.click()
                     if self.logger:
                         self.logger.info("✅ Clicked Create Another")
+                    
+                    # Wait for new form to load - look for empty date field
                     self.page.wait_for_load_state("domcontentloaded")
+                    self.page.wait_for_timeout(1000)  # Give form time to reset
+                    
+                    if self.logger:
+                        self.logger.info("✅ New expense item form ready")
                     return True
             except:
                 continue

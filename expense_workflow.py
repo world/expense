@@ -220,12 +220,14 @@ class ExpenseWorkflow:
             if success and not self.test_mode:
                 # Handle "Create Another" vs "Save and Close"
                 if not is_last:
+                    self.logger.info(f"\n--- Moving to next receipt ({i+1}/{total}) ---")
                     # Try "Create Another" first
                     if not self.browser_agent.click_create_another():
                         # Fall back to regular create item flow
-                        self.logger.debug("Will use 'Create Item' for next receipt")
+                        self.logger.warning("Create Another failed, will try Create Item for next receipt")
                 else:
                     # Last receipt - save and close
+                    self.logger.info("\n--- Last receipt, saving and closing ---")
                     self.browser_agent.click_save_and_close()
         
         # Log summary
