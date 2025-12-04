@@ -304,35 +304,8 @@ def main():
                     browser_agent.stop()
                     sys.exit(1)
             
-            # Scrape and verify expense types from Oracle
-            logger.info("Verifying expense types from Oracle...")
-            scraped_types = browser_agent.scrape_expense_types()
-            
-            if scraped_types:
-                # Compare with config (expense_types is now just a list of strings)
-                configured_types = config.get_expense_types()
-                
-                # Check if there are new types in Oracle not in config
-                new_types = [t for t in scraped_types if t not in configured_types]
-                missing_types = [t for t in configured_types if t not in scraped_types]
-                
-                if new_types or missing_types:
-                    logger.warning(f"⚠️  Expense type mismatch detected!")
-                    if new_types:
-                        logger.warning(f"   New types in Oracle: {new_types}")
-                    if missing_types:
-                        logger.warning(f"   Types in config.json not in Oracle: {missing_types}")
-                    
-                    update = input("\nUpdate config.json with current Oracle types? [Y/n]: ").strip().lower()
-                    if update != 'n':
-                        # Update config with scraped types (just strings now)
-                        config.config_data['expense_types'] = scraped_types
-                        config.save_config()
-                        logger.info(f"✅ Updated config.json with {len(scraped_types)} expense types from Oracle")
-                else:
-                    logger.info("✅ Expense types match Oracle")
-            else:
-                logger.warning("⚠️  Could not verify expense types from Oracle, using config.json as-is")
+            # Skip scraping - use expense types from config.json
+            logger.info(f"Using {len(config.get_expense_types())} expense types from config.json")
         
         except Exception as e:
             logger.error(f"Browser initialization failed: {e}")
