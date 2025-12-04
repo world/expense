@@ -126,30 +126,21 @@ Your task:
 5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
 6. Generate a concise description (max 50 chars)
 
-CRITICAL: Return ONLY valid JSON with ALL of these REQUIRED fields:
-{{
-  "type_key": "MEAL",
-  "type_label": "Meals",
-  "merchant": "Chipotle Mexican Grill",
-  "total_amount": 42.10,
-  "currency": "USD",
-  "date": "15-01-2025",
-  "description": "Team lunch"
-}}
+CRITICAL INSTRUCTIONS - YOU MUST FOLLOW EXACTLY:
+1. Return ONLY a single JSON object - no markdown, no explanations
+2. Include ALL 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description
+3. Date MUST be DD-MM-YYYY format (e.g., "15-01-2025")
+4. type_key must match one of: {', '.join([et['type_key'] for et in self.expense_types])}
 
-IMPORTANT RULES:
-- ALL fields are REQUIRED (type_key, type_label, merchant, total_amount, currency, date, description)
-- Date MUST be in DD-MM-YYYY format (day-month-year), e.g., "15-01-2025" not "01/15/2025"
-- If you cannot find a date, set date to null
-- If you cannot determine amount, set total_amount to 0
-- type_key must be one of: {', '.join([et['type_key'] for et in self.expense_types])}
-- Return ONLY the JSON object, no markdown code blocks, no extra text"""
+Example format (you must follow this exact structure):
+{{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":15.75,"currency":"USD","date":"15-01-2025","description":"Coffee and breakfast"}}
 
-        user_prompt = f"""Analyze this receipt text and extract expense information:
+If you cannot find a date, use null. If unclear on amount, use 0. But you MUST include all 7 fields."""
 
+        user_prompt = f"""Receipt text:
 {ocr_text}
 
-Return JSON only."""
+Return ONLY the JSON with all 7 fields (type_key, type_label, merchant, total_amount, currency, date, description)."""
 
         return [
             {"role": "system", "content": system_prompt},
