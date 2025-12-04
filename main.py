@@ -7,7 +7,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # Try to import tkinter for Finder dialog, but make it optional
 try:
@@ -27,6 +27,28 @@ from expense_workflow import ExpenseWorkflow
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.heic'}
 
 
+def get_last_used_folder() -> Optional[Path]:
+    """Get the last used receipts folder from cache."""
+    cache_file = Path.home() / ".expense_helper_cache"
+    if cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                last_path = f.read().strip()
+                if last_path and Path(last_path).exists():
+                    return Path(last_path)
+        except:
+            pass
+    return None
+
+def save_last_used_folder(folder_path: Path):
+    """Save the last used folder to cache."""
+    cache_file = Path.home() / ".expense_helper_cache"
+    try:
+        with open(cache_file, 'w') as f:
+            f.write(str(folder_path))
+    except:
+        pass  # Don't fail if we can't save
+
 def select_receipts_folder() -> Path:
     """
     Prompt user to select receipts folder using macOS Finder.
@@ -34,12 +56,16 @@ def select_receipts_folder() -> Path:
     Returns:
         Path to selected folder
     """
-    # Default starting path
-    default_path = Path.home() / "Documents"
+    # Try to get last used folder, fallback to Documents
+    last_used = get_last_used_folder()
+    default_path = last_used if last_used else (Path.home() / "Documents")
     
     print("\n📁 SELECT RECEIPTS FOLDER")
     print("=" * 70)
-    print(f"Default: {default_path}")
+    if last_used:
+        print(f"Default: {default_path} (last used)")
+    else:
+        print(f"Default: {default_path}")
     print()
     print("Options:")
     print("  1. Press Enter to use default")
@@ -103,6 +129,10 @@ def select_receipts_folder() -> Path:
         sys.exit(1)
     
     print(f"\n✅ Using folder: {folder_path}")
+    
+    # Save for next time
+    save_last_used_folder(folder_path)
+    
     return folder_path
 
 

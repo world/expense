@@ -18,6 +18,9 @@ build/
 *.log
 expense_helper.log
 
+# Cache
+.expense_helper_cache
+
 # Config with secrets
 config.json
 
