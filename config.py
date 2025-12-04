@@ -72,15 +72,50 @@ class Config:
         """
         try:
             if provider == "anthropic":
-                # Anthropic doesn't have a models.list() endpoint
-                # Return common Claude models
-                return [
+                # Anthropic doesn't have a public models.list() endpoint
+                # We need to test common models to see what's available
+                print("   Testing available Claude models with your API key...")
+                
+                temp_client = Anthropic(api_key=api_key)
+                
+                # Common Claude models to test (from newest to oldest)
+                test_models = [
                     "claude-3-5-sonnet-20241022",
-                    "claude-3-5-haiku-20241022",
+                    "claude-3-5-sonnet-latest",
+                    "claude-3-5-haiku-20241022", 
                     "claude-3-opus-20240229",
                     "claude-3-sonnet-20240229",
-                    "claude-3-haiku-20240307"
+                    "claude-3-haiku-20240307",
+                    "claude-3-5-sonnet-20240620",
+                    "claude-3-opus-latest",
+                    "claude-3-sonnet-latest",
+                    "claude-3-haiku-latest"
                 ]
+                
+                available = []
+                for model in test_models:
+                    try:
+                        # Make a minimal test call
+                        temp_client.messages.create(
+                            model=model,
+                            max_tokens=1,
+                            messages=[{"role": "user", "content": "Hi"}]
+                        )
+                        available.append(model)
+                    except Exception as e:
+                        # Model not available or not accessible
+                        if "404" not in str(e) and "not_found" not in str(e):
+                            # Some other error, might still be valid
+                            pass
+                
+                if available:
+                    print(f"   ✅ Found {len(available)} accessible models")
+                    return available
+                else:
+                    print("   ⚠️  Could not auto-detect models, using defaults")
+                    # Return a basic list if we couldn't test
+                    return ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+                    
             elif provider == "openai":
                 # Use OpenAI client
                 temp_client = OpenAI(api_key=api_key, base_url=base_url)

@@ -97,6 +97,7 @@ setup: check-deps venv playwright-install
 	@echo ""
 	@echo "The app will prompt you for LLM API key on first run."
 	@echo ""
+	@printf '\a'  # Beep!
 
 run:
 	@if [ ! -d "$(VENV)" ]; then \
