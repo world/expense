@@ -476,6 +476,9 @@ class OracleBrowserAgent:
             if not date_filled and self.logger:
                 self.logger.warning("Could not fill Date field")
             
+            # Wait for type dropdown to populate after date entry
+            time.sleep(0.5)
+            
             # Fill Type dropdown
             if self.logger:
                 self.logger.info(f"📋 Filling type: {expense_type}")
@@ -548,6 +551,14 @@ class OracleBrowserAgent:
                     self.logger.info("⏳ Attachments not detected, brief wait...")
                 time.sleep(0.5)
             
+            # Upload receipt attachment right after attachments section appears
+            if receipt_path:
+                if self.logger:
+                    self.logger.info("📎 Uploading receipt attachment...")
+                upload_success = self.upload_receipt_attachment(receipt_path)
+                if not upload_success:
+                    self.logger.warning("⚠️  Attachment upload failed, but continuing...")
+            
             # Fill Amount field
             if self.logger:
                 self.logger.info(f"💵 Filling amount: {amount}")
@@ -574,16 +585,6 @@ class OracleBrowserAgent:
             
             if self.logger:
                 self.logger.info("✅ Expense item fields filled")
-            
-            # Skip merchant and description for now - Oracle may not have these fields on this page
-            
-            # Upload receipt attachment if provided
-            if receipt_path:
-                if self.logger:
-                    self.logger.info("📎 Uploading receipt attachment...")
-                upload_success = self.upload_receipt_attachment(receipt_path)
-                if not upload_success:
-                    self.logger.warning("⚠️  Attachment upload failed, but continuing...")
             
             return True
             
