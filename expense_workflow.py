@@ -117,13 +117,21 @@ class ExpenseWorkflow:
         self.logger.info(f"{'='*70}")
         
         # Step 1: OCR + LLM analysis
-        data, warnings, raw_ocr = self.receipt_processor.analyze_receipt(image_path)
+        data, warnings, raw_ocr, error_reason = self.receipt_processor.analyze_receipt(image_path)
         
         if not data:
-            self.logger.error(f"Failed to analyze receipt {image_path.name}")
+            # Show the actual error reason
+            if error_reason:
+                self.logger.error(f"Failed to analyze receipt {image_path.name}")
+                self.logger.error(f"  REASON: {error_reason}")
+            else:
+                self.logger.error(f"Failed to analyze receipt {image_path.name}")
+            
+            # Also show any additional warnings
             if warnings:
                 for warning in warnings:
-                    self.logger.error(f"  └─ {warning}")
+                    self.logger.warning(f"  └─ {warning}")
+            
             self.receipts_skipped += 1
             return False
         

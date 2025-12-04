@@ -219,7 +219,7 @@ Return JSON only."""
             warnings.append(f"Error parsing LLM response: {e}")
             return None, warnings
     
-    def analyze_receipt(self, image_path: Path) -> Tuple[Optional[Dict[str, Any]], List[str], str]:
+    def analyze_receipt(self, image_path: Path) -> Tuple[Optional[Dict[str, Any]], List[str], str, Optional[str]]:
         """
         Full pipeline: OCR + LLM analysis of a receipt.
         
@@ -227,17 +227,19 @@ Return JSON only."""
             image_path: Path to receipt image
             
         Returns:
-            Tuple of (parsed_data, warnings, raw_ocr_text)
+            Tuple of (parsed_data, warnings, raw_ocr_text, error_reason)
         """
         all_warnings = []
+        error_reason = None
         
         # Step 1: OCR
         ocr_text, ocr_warnings = self.extract_text_from_image(image_path)
         all_warnings.extend(ocr_warnings)
         
         if not ocr_text:
-            all_warnings.append("No text extracted from image")
-            return None, all_warnings, ""
+            error_reason = "No text extracted from image via OCR"
+            all_warnings.append(error_reason)
+            return None, all_warnings, "", error_reason
         
         # Step 2: Build LLM prompt
         messages = self.build_llm_prompt(ocr_text)
@@ -273,11 +275,11 @@ Return JSON only."""
                 self.logger.debug(f"LLM response received ({len(llm_response)} chars)")
             
         except Exception as e:
-            error_msg = f"LLM call failed: {str(e)}"
-            all_warnings.append(error_msg)
+            error_reason = f"LLM API call failed: {str(e)}"
+            all_warnings.append(error_reason)
             if self.logger:
-                self.logger.error(error_msg)
-            return None, all_warnings, ocr_text
+                self.logger.error(error_reason)
+            return None, all_warnings, ocr_text, error_reason
         
         # Step 4: Parse response
         data, parse_warnings = self.parse_llm_response(llm_response)
@@ -286,7 +288,12 @@ Return JSON only."""
         if data:
             # Add raw response for verbose logging
             data['_raw_llm_response'] = llm_response
-        
-        return data, all_warnings, ocr_text
+            return data, all_warnings, ocr_text, None
+        else:
+            # Parsing failed - capture the specific reason
+            error_reason = f"Failed to parse LLM response. LLM returned: {llm_response[:200]}..."
+            if parse_warnings:
+                error_reason = f"{parse_warnings[0]} | Raw response: {llm_response[:150]}..."
+            return None, all_warnings, ocr_text, error_reason
 
 
