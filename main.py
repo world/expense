@@ -360,8 +360,12 @@ def main():
     if browser_agent and not args.test:
         print("\n" + "=" * 60)
         print("🌐 Browser left open for you to review/complete.")
-        print("   Close the browser manually when done.")
+        print("   Press Enter here when you're done to close the browser.")
         print("=" * 60)
+        try:
+            input()  # Wait for user to press Enter - keeps browser alive
+        except (EOFError, KeyboardInterrupt):
+            pass
 
 
 if __name__ == '__main__':

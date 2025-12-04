@@ -553,10 +553,21 @@ class OracleBrowserAgent:
                     file_input = self.page.locator("input[type='file']").first
                     file_input.set_input_files(receipt_path)
                     
-                    # Wait for upload to complete
-                    self.page.wait_for_load_state("networkidle", timeout=10000)
                     if self.logger:
-                        self.logger.info("✅ Attachment uploaded")
+                        self.logger.info("⏳ Waiting for upload to complete...")
+                    
+                    # Wait for upload confirmation - look for the uploaded file indicator
+                    # Oracle shows img[title='File'] and a[title='Download'] when upload is done
+                    upload_confirm_selector = "img[title='File'], a[title='Download'], span[id*='otAvsddDiFile']"
+                    try:
+                        self.page.locator(upload_confirm_selector).first.wait_for(state="visible", timeout=30000)
+                        if self.logger:
+                            self.logger.info("✅ Attachment uploaded successfully")
+                    except:
+                        # Fallback: just wait for network to settle
+                        self.page.wait_for_load_state("networkidle", timeout=10000)
+                        if self.logger:
+                            self.logger.info("✅ Attachment upload completed (network idle)")
                 except Exception as e:
                     if self.logger:
                         self.logger.warning(f"⚠️  Attachment upload failed: {e}")
