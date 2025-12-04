@@ -290,7 +290,7 @@ def main():
             # Get home city from config
             home_city = config.config_data.get('home_city', '')
             if not home_city:
-                home_city = input("Enter your home city (for expense reports): ").strip()
+                home_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
                 if home_city:
                     config.config_data['home_city'] = home_city
                     config.save_config()
