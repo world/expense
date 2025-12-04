@@ -442,30 +442,37 @@ class OracleBrowserAgent:
                 # Smart wait: wait for form to load (date field visible)
                 self.page.wait_for_load_state("domcontentloaded")
             
-            # Fill Date field
+            # Fill Date field - Oracle uses StartDate in id, format dd-mmm-yyyy
             if self.logger:
                 self.logger.info(f"📅 Filling date: {date}")
+            
+            # Convert date from DD-MM-YYYY to DD-MMM-YYYY format for Oracle
+            oracle_date = date
+            try:
+                from datetime import datetime
+                # Try parsing DD-MM-YYYY format
+                if '-' in date and len(date.split('-')[1]) <= 2:
+                    parsed = datetime.strptime(date, "%d-%m-%Y")
+                    oracle_date = parsed.strftime("%d-%b-%Y")  # e.g., "19-Nov-2025"
+                    if self.logger:
+                        self.logger.info(f"📅 Converted to Oracle format: {oracle_date}")
+            except:
+                pass  # Keep original if conversion fails
+            
             date_filled = False
-            date_selectors = [
-                "input[placeholder*='dd-mmm']",
-                "input[id*='date' i]",
-                "input[name*='date' i]",
-                "//label[contains(text(),'Date')]/following::input[1]"
-            ]
-            for sel in date_selectors:
-                try:
-                    if sel.startswith("//"):
-                        loc = self.page.locator(f"xpath={sel}")
-                    else:
-                        loc = self.page.locator(sel)
-                    if loc.first.is_visible(timeout=2000):
-                        loc.first.fill(date)
-                        date_filled = True
-                        break
-                except:
-                    continue
-            if not date_filled and self.logger:
-                self.logger.warning("Could not fill Date field")
+            # Oracle uses input with StartDate in the id
+            date_selector = "input[id*='StartDate'], input[placeholder*='dd-mmm'], input[aria-label='Date']"
+            
+            try:
+                loc = self.page.locator(date_selector).first
+                loc.wait_for(state="visible", timeout=2000)
+                loc.fill(oracle_date)
+                date_filled = True
+                if self.logger:
+                    self.logger.info(f"✅ Filled date: {oracle_date}")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Could not fill Date field: {e}")
             
             # Fill Type dropdown - it's a <select> with ExpenseTypeId in the id
             if self.logger:
