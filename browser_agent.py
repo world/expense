@@ -412,17 +412,31 @@ class OracleBrowserAgent:
                     self.logger.info("Clicking 'Create Item'...")
                 
                 # Race all Create Item selectors at once
-                create_item_selector = "text=Create Item, button:has-text('Create Item'), a:has-text('Create Item'), [aria-label*='Create Item']"
+                # Oracle uses span.xrk for Create Item
+                create_item_selectors = [
+                    "span.xrk:has-text('Create Item')",
+                    "text=Create Item",
+                    "button:has-text('Create Item')",
+                    "a:has-text('Create Item')",
+                    "[aria-label*='Create Item']"
+                ]
                 
-                try:
-                    loc = self.page.locator(create_item_selector).first
-                    loc.wait_for(state="visible", timeout=3000)
-                    loc.click()
+                clicked = False
+                for selector in create_item_selectors:
+                    try:
+                        loc = self.page.locator(selector).first
+                        if loc.is_visible(timeout=500):
+                            loc.click()
+                            clicked = True
+                            if self.logger:
+                                self.logger.info("✅ Clicked Create Item")
+                            break
+                    except:
+                        continue
+                
+                if not clicked:
                     if self.logger:
-                        self.logger.info("✅ Clicked Create Item")
-                except Exception as e:
-                    if self.logger:
-                        self.logger.error(f"Could not find Create Item button: {e}")
+                        self.logger.error("Could not find Create Item button")
                     return False
                 
                 # Smart wait: wait for form to load (date field visible)
