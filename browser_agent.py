@@ -14,28 +14,43 @@ class OracleBrowserAgent:
         self.config = config
         self.logger = logger
         self.playwright: Optional[Playwright] = None
-        self.browser: Optional[Browser] = None
+        self.browser = None  # Could be Browser or BrowserContext
+        self.context = None
         self.page: Optional[Page] = None
         self.is_logged_in = False
     
     def start(self):
-        """Start Playwright and launch browser."""
-        if self.logger:
-            self.logger.info("Starting browser...")
+        """Start Playwright with persistent session (remembers login)."""
+        import os
         
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=False)
-        self.page = self.browser.new_page()
+        
+        # Use persistent context - saves cookies/session between runs
+        user_data_dir = os.path.expanduser("~/.expense_helper_browser")
         
         if self.logger:
-            self.logger.info("✅ Browser started")
+            self.logger.info("🚀 Launching browser (session will be remembered)...")
+        
+        # Launch with persistent context - login persists between runs!
+        self.context = self.playwright.chromium.launch_persistent_context(
+            user_data_dir,
+            headless=False,
+            viewport={'width': 1400, 'height': 900}
+        )
+        
+        # Use existing page or create new one
+        if self.context.pages:
+            self.page = self.context.pages[0]
+        else:
+            self.page = self.context.new_page()
+        
+        if self.logger:
+            self.logger.info("✅ Browser started (login will be remembered for next time)")
     
     def stop(self):
         """Close browser and cleanup."""
-        if self.page:
-            self.page.close()
-        if self.browser:
-            self.browser.close()
+        if self.context:
+            self.context.close()
         if self.playwright:
             self.playwright.stop()
         
