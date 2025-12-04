@@ -231,16 +231,45 @@ Return JSON with all 7 fields. Use today's date ({datetime.now().strftime('%d-%m
                                 continue
                         
                         if parsed_date:
-                            # Always convert to DD-MM-YYYY format
+                            # Validate year is reasonable (OCR often misreads years)
+                            current_year = datetime.now().year
+                            year = parsed_date.year
+                            
+                            # Year should be within reasonable range: past 5 years to next year
+                            if year < (current_year - 5) or year > (current_year + 1):
+                                # Try to fix common OCR mistakes
+                                # 2095 -> 2024, 2029 -> 2024, etc.
+                                fixed_year = current_year
+                                
+                                # Try smart fixes first
+                                last_digit = year % 10
+                                if abs(last_digit - (current_year % 10)) <= 1:
+                                    # Last digit is close, use current year
+                                    fixed_year = (year // 10) * 10 + (current_year % 10)
+                                
+                                # If still bad, just use current year
+                                if fixed_year < (current_year - 5) or fixed_year > (current_year + 1):
+                                    fixed_year = current_year
+                                
+                                # Apply fix
+                                parsed_date = parsed_date.replace(year=fixed_year)
+                                if self.logger:
+                                    self.logger.debug(f"Fixed OCR date year from {year} to {fixed_year}")
+                            
+                            # Convert to DD-MM-YYYY format
                             data['date'] = parsed_date.strftime('%d-%m-%Y')
                         else:
-                            warnings.append(f"Could not parse date: {date_value}")
-                            data['date'] = None
+                            # Could not parse date - use today
+                            if self.logger:
+                                self.logger.debug(f"Could not parse date '{date_value}', using today")
+                            data['date'] = datetime.now().strftime('%d-%m-%Y')
                 except (ValueError, TypeError) as e:
-                    warnings.append(f"Date parsing error: {e}")
-                    data['date'] = None
+                    if self.logger:
+                        self.logger.debug(f"Date parsing error: {e}, using today")
+                    data['date'] = datetime.now().strftime('%d-%m-%Y')
             else:
-                data['date'] = None
+                # No date provided - use today
+                data['date'] = datetime.now().strftime('%d-%m-%Y')
             
             return data, warnings
             
