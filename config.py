@@ -286,11 +286,9 @@ class Config:
         self.config_data['llm'] = result
         self.llm_provider = provider_type
         
-        # Offer to save
-        save = input("\n💾 Save these LLM settings to config.json? [Y/n]: ").strip().lower()
-        if save != 'n':
-            self.save_config()
-            print(f"✅ Saved to {self.config_path}")
+        # Auto-save
+        self.save_config()
+        print(f"✅ Saved to {self.config_path}")
         
         return result
     
