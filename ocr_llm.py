@@ -50,11 +50,12 @@ class ReceiptProcessor:
     
     def build_vision_prompt(self) -> str:
         """Build prompt for vision-based receipt analysis."""
-        types_list = "\n".join([f'- {et["type_key"]}: "{et["type_label"]}"' for et in self.expense_types])
+        # expense_types is now just a list of strings
+        types_list = "\n".join([f'- "{t}"' for t in self.expense_types])
         
         return f"""Analyze this receipt image and extract expense information.
 
-AVAILABLE EXPENSE TYPES (use type_key exactly as shown):
+AVAILABLE EXPENSE TYPES (use exactly as shown):
 {types_list}
 
 INSTRUCTIONS:
@@ -75,13 +76,13 @@ INSTRUCTIONS:
 5. Generate a 2-5 word description
 
 REQUIRED OUTPUT - Return ONLY this JSON (no markdown, no explanation):
-{{"type_key":"<exact key from list>","type_label":"<matching label>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
+{{"expense_type":"<exact type from list>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
 
 If date is not visible, use today: {datetime.now().strftime('%d-%m-%Y')}
 If amount unclear, use 0.
 
 Example:
-{{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":9.58,"currency":"USD","date":"19-11-2024","description":"Coffee and pastry"}}"""
+{{"expense_type":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":9.58,"currency":"USD","date":"19-11-2024","description":"Coffee and pastry"}}"""
     
     def call_vision_api(self, image_path: Path) -> Tuple[Optional[str], Optional[str]]:
         """Call Claude or OpenAI vision API with receipt image."""
@@ -163,7 +164,7 @@ Example:
     
     def build_ocr_prompt(self, ocr_text: str) -> str:
         """Build prompt for OCR-based text analysis."""
-        types_list = "\n".join([f'- {et["type_key"]}: "{et["type_label"]}"' for et in self.expense_types])
+        types_list = "\n".join([f'- "{t}"' for t in self.expense_types])
         
         return f"""Analyze this receipt text and extract expense information.
 
@@ -174,7 +175,7 @@ AVAILABLE EXPENSE TYPES:
 {types_list}
 
 Return ONLY this JSON (no markdown):
-{{"type_key":"<key>","type_label":"<label>","merchant":"<name>","total_amount":<number>,"currency":"USD","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
+{{"expense_type":"<type from list>","merchant":"<name>","total_amount":<number>,"currency":"USD","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
 
 If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
     
@@ -213,7 +214,7 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
             data = json.loads(response_text.strip())
             
             # Validate required fields
-            required = ['type_key', 'type_label', 'merchant', 'total_amount', 'currency', 'date', 'description']
+            required = ['expense_type', 'merchant', 'total_amount', 'currency', 'date', 'description']
             missing = [f for f in required if f not in data or data[f] is None or str(data[f]).strip() == '']
             if missing:
                 warnings.append(f"Missing required fields: {missing}")
@@ -226,16 +227,14 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
                 warnings.append(f"Invalid amount: {data.get('total_amount')}")
                 data['total_amount'] = 0.0
             
-            # Fix type_key if invalid
-            valid_keys = [et['type_key'] for et in self.expense_types]
-            if data['type_key'] not in valid_keys:
-                misc_type = next((et for et in self.expense_types if 'OTHER' in et['type_key'].upper()), None)
+            # Validate expense_type against known types
+            if data['expense_type'] not in self.expense_types:
+                # Find closest match or use fallback
+                misc_type = next((t for t in self.expense_types if 'Other' in t or 'Misc' in t), None)
                 if misc_type:
-                    data['type_key'] = misc_type['type_key']
-                    data['type_label'] = misc_type['type_label']
+                    data['expense_type'] = misc_type
                 else:
-                    data['type_key'] = self.expense_types[0]['type_key']
-                    data['type_label'] = self.expense_types[0]['type_label']
+                    data['expense_type'] = self.expense_types[-1]  # Last one is usually "Other"
             
             # Truncate long description
             if data['description'] and len(data['description']) > 100:

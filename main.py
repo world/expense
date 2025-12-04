@@ -309,12 +309,12 @@ def main():
             scraped_types = browser_agent.scrape_expense_types()
             
             if scraped_types:
-                # Compare with config
-                configured_labels = [et['type_label'] for et in config.get_expense_types()]
+                # Compare with config (expense_types is now just a list of strings)
+                configured_types = config.get_expense_types()
                 
                 # Check if there are new types in Oracle not in config
-                new_types = [t for t in scraped_types if t not in configured_labels]
-                missing_types = [t for t in configured_labels if t not in scraped_types]
+                new_types = [t for t in scraped_types if t not in configured_types]
+                missing_types = [t for t in configured_types if t not in scraped_types]
                 
                 if new_types or missing_types:
                     logger.warning(f"⚠️  Expense type mismatch detected!")
@@ -325,25 +325,10 @@ def main():
                     
                     update = input("\nUpdate config.json with current Oracle types? [Y/n]: ").strip().lower()
                     if update != 'n':
-                        # Build new expense_types list
-                        updated_types = []
-                        for label in scraped_types:
-                            # Try to find existing config for this type
-                            existing = next((et for et in config.get_expense_types() if et['type_label'] == label), None)
-                            if existing:
-                                updated_types.append(existing)
-                            else:
-                                # New type - create basic entry
-                                type_key = label.upper().replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
-                                updated_types.append({
-                                    "type_key": type_key,
-                                    "type_label": label
-                                })
-                        
-                        # Update config
-                        config.config_data['expense_types'] = updated_types
+                        # Update config with scraped types (just strings now)
+                        config.config_data['expense_types'] = scraped_types
                         config.save_config()
-                        logger.info(f"✅ Updated config.json with {len(updated_types)} expense types from Oracle")
+                        logger.info(f"✅ Updated config.json with {len(scraped_types)} expense types from Oracle")
                 else:
                     logger.info("✅ Expense types match Oracle")
             else:

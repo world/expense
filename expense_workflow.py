@@ -153,8 +153,7 @@ class ExpenseWorkflow:
             filename=image_path.name,
             index=index,
             total_receipts=total,
-            type_key=data.get('type_key', 'OTHER'),
-            type_label=data.get('type_label', 'Other'),
+            expense_type=data.get('expense_type', 'Miscellaneous Other'),
             total_amount=amount,
             currency=currency,
             merchant=data.get('merchant', 'Unknown'),
@@ -170,7 +169,7 @@ class ExpenseWorkflow:
         # Step 5: Create in Oracle (unless test mode)
         if not self.test_mode:
             success = self.browser_agent.create_expense_item(
-                expense_type=data.get('type_label', 'Other'),
+                expense_type=data.get('expense_type', 'Miscellaneous Other'),
                 amount=amount,
                 date=final_date,
                 merchant=data.get('merchant', 'Unknown'),

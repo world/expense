@@ -64,8 +64,7 @@ class ExpenseLogger:
         filename: str,
         index: int,
         total_receipts: int,
-        type_key: str,
-        type_label: str,
+        expense_type: str,
         total_amount: float,
         currency: str,
         merchant: str,
@@ -84,8 +83,7 @@ class ExpenseLogger:
             filename: Receipt image filename
             index: Receipt number (1-indexed)
             total_receipts: Total number of receipts
-            type_key: Internal expense type key
-            type_label: Oracle dropdown label
+            expense_type: Oracle expense type label
             total_amount: Expense amount
             currency: Currency code
             merchant: Merchant name
@@ -104,7 +102,7 @@ class ExpenseLogger:
         summary = (
             f"Receipt #{index}/{total_receipts} '{filename}': "
             f"date={date} (source={date_source}), "
-            f"type={type_key}/\"{type_label}\", "
+            f"type=\"{expense_type}\", "
             f"amount={total_amount:.2f} {currency}, "
             f"merchant='{merchant}', "
             f"desc='{description}'{warning_str}"
@@ -117,8 +115,7 @@ class ExpenseLogger:
             "filename": filename,
             "index": index,
             "total_receipts": total_receipts,
-            "type_key": type_key,
-            "type_label": type_label,
+            "expense_type": expense_type,
             "total_amount": total_amount,
             "currency": currency,
             "merchant": merchant,
@@ -172,7 +169,7 @@ class ExpenseLogger:
                 idx = receipt['index']
                 filename = receipt['filename'][:24]  # Truncate if too long
                 date = receipt['date']
-                type_label = receipt['type_label'][:29]  # Truncate if too long
+                type_label = receipt['expense_type'][:29]  # Truncate if too long
                 merchant = receipt['merchant'][:19]  # Truncate if too long
                 amount = receipt['total_amount']
                 currency = receipt['currency']
