@@ -2,7 +2,7 @@
 Playwright-based browser automation for Oracle Expenses.
 """
 import time
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from playwright.sync_api import sync_playwright, Page, Browser, Playwright, TimeoutError as PlaywrightTimeoutError
 
@@ -146,6 +146,74 @@ class OracleBrowserAgent:
             if self.logger:
                 self.logger.warning(f"Could not scan for existing reports: {e}")
             return None
+    
+    def scrape_expense_types(self) -> List[str]:
+        """
+        Scrape available expense types from Oracle dropdown.
+        
+        Returns:
+            List of expense type labels from the dropdown
+        """
+        try:
+            if self.logger:
+                self.logger.info("🔍 Scraping expense types from Oracle...")
+            
+            fields = self.config.get_selector('fields')
+            type_selector = fields.get('expense_type')
+            
+            # Navigate to create item to expose the dropdown
+            buttons = self.config.get_selector('buttons')
+            create_item_selector = buttons.get('create_item')
+            
+            try:
+                self.page.click(create_item_selector, timeout=10000)
+                time.sleep(2)  # Wait for form to load
+            except:
+                if self.logger:
+                    self.logger.warning("Could not click Create Item for scraping, trying anyway...")
+            
+            # Try to get dropdown options
+            expense_types = []
+            
+            # Method 1: Try as <select> element
+            try:
+                options = self.page.query_selector_all(f"{type_selector} option")
+                for option in options:
+                    text = option.inner_text().strip()
+                    if text and text not in ['', '--Select--', 'Select One']:
+                        expense_types.append(text)
+            except:
+                pass
+            
+            # Method 2: If not a select, try to find a dropdown list
+            if not expense_types:
+                try:
+                    # Click to open dropdown
+                    self.page.click(type_selector, timeout=5000)
+                    time.sleep(1)
+                    
+                    # Look for list items
+                    dropdown_items = self.page.query_selector_all("li[role='option'], div[role='option'], a[role='option']")
+                    for item in dropdown_items:
+                        text = item.inner_text().strip()
+                        if text and text not in ['', '--Select--', 'Select One']:
+                            expense_types.append(text)
+                except:
+                    pass
+            
+            if expense_types:
+                if self.logger:
+                    self.logger.info(f"✅ Found {len(expense_types)} expense types in Oracle")
+                return expense_types
+            else:
+                if self.logger:
+                    self.logger.warning("⚠️  Could not scrape expense types from Oracle")
+                return []
+                
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"Failed to scrape expense types: {e}")
+            return []
     
     def create_new_report(self, report_name: str = None) -> bool:
         """
