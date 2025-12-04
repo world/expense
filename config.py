@@ -60,7 +60,7 @@ class Config:
     
     def fetch_available_models(self, api_key: str, base_url: str, provider: str) -> List[str]:
         """
-        Fetch available models from the LLM API.
+        Dynamically fetch available models from the LLM API.
         
         Args:
             api_key: API key for authentication
@@ -70,69 +70,58 @@ class Config:
         Returns:
             List of available model IDs
         """
+        import requests
+        
         try:
             if provider == "anthropic":
-                # Anthropic doesn't have a public models.list() endpoint
-                # We need to test common models to see what's available
-                print("   Testing available Claude models with your API key...")
+                # Anthropic has a models list endpoint
+                print("   Fetching Claude models from Anthropic API...")
                 
-                temp_client = Anthropic(api_key=api_key)
+                response = requests.get(
+                    "https://api.anthropic.com/v1/models",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01"
+                    },
+                    timeout=10
+                )
                 
-                # Claude models to test (from newest to oldest)
-                test_models = [
-                    # Claude 4.x (newest - 2025)
-                    "claude-sonnet-4-20250514",
-                    "claude-opus-4-20250514",
-                    # Claude 3.5 (2024)
-                    "claude-3-5-sonnet-20241022",
-                    "claude-3-5-sonnet-latest",
-                    "claude-3-5-haiku-20241022",
-                    "claude-3-5-haiku-latest",
-                    # Claude 3 (2024)
-                    "claude-3-opus-20240229",
-                    "claude-3-opus-latest",
-                    "claude-3-sonnet-20240229",
-                    "claude-3-haiku-20240307",
-                ]
-                
-                available = []
-                for model in test_models:
-                    try:
-                        # Make a minimal test call
-                        temp_client.messages.create(
-                            model=model,
-                            max_tokens=1,
-                            messages=[{"role": "user", "content": "Hi"}]
-                        )
-                        available.append(model)
-                    except Exception as e:
-                        # Model not available or not accessible
-                        if "404" not in str(e) and "not_found" not in str(e):
-                            # Some other error, might still be valid
-                            pass
-                
-                if available:
-                    print(f"   ✅ Found {len(available)} accessible models")
-                    return available
+                if response.status_code == 200:
+                    models_data = response.json().get('data', [])
+                    model_ids = [m['id'] for m in models_data]
+                    # Sort with newest first
+                    model_ids.sort(reverse=True)
+                    print(f"   ✅ Found {len(model_ids)} models")
+                    return model_ids
                 else:
-                    print("   ⚠️  Could not auto-detect models, using defaults")
-                    # Return a basic list if we couldn't test
-                    return ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+                    print(f"   ⚠️  API returned {response.status_code}: {response.text[:100]}")
+                    return []
                     
             elif provider == "openai":
-                # Use OpenAI client
+                # Use OpenAI's models endpoint
+                print("   Fetching models from OpenAI API...")
+                
                 temp_client = OpenAI(api_key=api_key, base_url=base_url)
                 models = temp_client.models.list()
                 model_ids = [model.id for model in models.data]
-                model_ids.sort()
-                return model_ids
+                
+                # Filter to GPT/O1/O3 models (not embeddings, whisper, dall-e, etc)
+                gpt_models = [m for m in model_ids if any(x in m.lower() for x in ['gpt', 'o1', 'o3', 'chatgpt'])]
+                gpt_models.sort(reverse=True)
+                
+                print(f"   ✅ Found {len(gpt_models)} GPT models")
+                return gpt_models if gpt_models else model_ids[:20]
+                
             else:
-                # Try OpenAI-compatible API
+                # Try OpenAI-compatible API for custom providers
+                print("   Fetching models from custom API...")
                 temp_client = OpenAI(api_key=api_key, base_url=base_url)
                 models = temp_client.models.list()
                 model_ids = [model.id for model in models.data]
                 model_ids.sort()
+                print(f"   ✅ Found {len(model_ids)} models")
                 return model_ids
+                
         except Exception as e:
             print(f"⚠️  Could not fetch models: {e}")
             return []
