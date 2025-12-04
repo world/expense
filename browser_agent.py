@@ -524,29 +524,29 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.info("🍽️  Meals type - filling attendee info...")
                 
-                # Fill Number of Attendees = 1
+                # Fill Number of Attendees = 1 (id contains "numberOfAttendees")
                 try:
-                    attendee_count_selector = "input[id*='NumberOfAttendees'], input[id*='attendee' i], input[name*='attendee' i]"
+                    attendee_count_selector = "input[id*='numberOfAttendees']"
                     attendee_loc = self.page.locator(attendee_count_selector).first
-                    if attendee_loc.is_visible(timeout=1000):
-                        attendee_loc.fill("1")
-                        if self.logger:
-                            self.logger.info("✅ Set attendees: 1")
-                except:
+                    attendee_loc.wait_for(state="visible", timeout=2000)
+                    attendee_loc.fill("1")
                     if self.logger:
-                        self.logger.warning("Could not fill Number of Attendees")
+                        self.logger.info("✅ Set Number of Attendees: 1")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"Could not fill Number of Attendees: {e}")
                 
-                # Fill Attendee Names with user's name
+                # Fill Attendee Names with user's name (id contains "attendeesMeals")
                 try:
-                    names_selector = "input[id*='AttendeeNames'], input[id*='names' i], textarea[id*='attendee' i]"
+                    names_selector = "input[id*='attendeesMeals'], input[id*='attendees']"
                     names_loc = self.page.locator(names_selector).first
-                    if names_loc.is_visible(timeout=1000):
-                        names_loc.fill(user_full_name)
-                        if self.logger:
-                            self.logger.info(f"✅ Set attendee name: {user_full_name}")
-                except:
+                    names_loc.wait_for(state="visible", timeout=2000)
+                    names_loc.fill(user_full_name)
                     if self.logger:
-                        self.logger.warning("Could not fill Attendee Names")
+                        self.logger.info(f"✅ Set Attendees: {user_full_name}")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"Could not fill Attendees: {e}")
             
             # After type is selected, attachments dropzone should appear
             if self.logger:
@@ -575,15 +575,17 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.info("📎 Uploading receipt attachment...")
                 try:
-                    # Step 1: Click the dropzone to open the menu
-                    dropzone_link = self.page.locator("a[title='Add File'], text=Drag files here or click to add attachment, div.FndDropzone").first
+                    # Step 1: Click the dropzone link (has title="Add File" and id ending in cilDzMsg)
+                    dropzone_link = self.page.locator("a[id*='cilDzMsg'], a[title='Add File']").first
+                    if self.logger:
+                        self.logger.info("  Clicking dropzone...")
                     dropzone_link.click()
                     self.page.wait_for_timeout(500)
                     
-                    # Step 2: Click "Add File" from the dropdown menu
+                    # Step 2: Click "Add File" from the dropdown menu (id ends in miDzAddFi)
                     if self.logger:
                         self.logger.info("  Clicking 'Add File' from menu...")
-                    add_file_menu = self.page.locator("text=Add File, td:has-text('Add File'), [role='menuitem']:has-text('Add File')").first
+                    add_file_menu = self.page.locator("tr[id*='miDzAddFi'], [role='menuitem']:has-text('Add File'), td.xo2:has-text('Add File')").first
                     add_file_menu.click()
                     self.page.wait_for_timeout(500)
                     
