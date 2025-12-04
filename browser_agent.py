@@ -686,12 +686,18 @@ class OracleBrowserAgent:
                     if self.logger:
                         self.logger.info("✅ Clicked Create Another")
                     
-                    # Wait for new form to load - look for empty date field
-                    self.page.wait_for_load_state("domcontentloaded")
-                    self.page.wait_for_timeout(1000)  # Give form time to reset
+                    # Smart wait: look for "Create Expense Item" header to appear
+                    try:
+                        header_selector = "h1:has-text('Create Expense Item'), h1.xnw"
+                        self.page.locator(header_selector).first.wait_for(state="visible", timeout=5000)
+                        if self.logger:
+                            self.logger.info("✅ New expense item form ready")
+                    except:
+                        # Fallback to domcontentloaded
+                        self.page.wait_for_load_state("domcontentloaded")
+                        if self.logger:
+                            self.logger.info("✅ New form loaded (fallback)")
                     
-                    if self.logger:
-                        self.logger.info("✅ New expense item form ready")
                     return True
             except:
                 continue
