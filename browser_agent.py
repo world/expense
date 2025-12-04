@@ -580,24 +580,11 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.info("📎 Uploading receipt attachment...")
                 try:
-                    # Step 1: Click the dropzone link (has title="Add File" and id ending in cilDzMsg)
-                    dropzone_link = self.page.locator("a[id*='cilDzMsg'], a[title='Add File']").first
-                    if self.logger:
-                        self.logger.info("  Clicking dropzone...")
-                    dropzone_link.click()
-                    self.page.wait_for_timeout(500)
-                    
-                    # Step 2: Click "Add File" from the dropdown menu (id ends in miDzAddFi)
-                    if self.logger:
-                        self.logger.info("  Clicking 'Add File' from menu...")
-                    add_file_menu = self.page.locator("tr[id*='miDzAddFi'], [role='menuitem']:has-text('Add File'), td.xo2:has-text('Add File')").first
-                    add_file_menu.click()
-                    self.page.wait_for_timeout(500)
-                    
-                    # Step 3: Now file input should be available - set the file
-                    if self.logger:
-                        self.logger.info("  Setting file...")
+                    # Method 1: Try to find hidden file input and set files directly (bypasses Finder dialog)
                     file_input = self.page.locator("input[type='file']").first
+                    
+                    if self.logger:
+                        self.logger.info("  Setting file directly on input...")
                     file_input.set_input_files(receipt_path)
                     
                     if self.logger:
@@ -617,7 +604,32 @@ class OracleBrowserAgent:
                             self.logger.info("✅ Attachment upload completed (network idle)")
                 except Exception as e:
                     if self.logger:
-                        self.logger.warning(f"⚠️  Attachment upload failed: {e}")
+                        self.logger.warning(f"⚠️  Direct file input failed: {e}, trying click method...")
+                    
+                    # Method 2: Fallback - click dropzone and menu, then handle file picker
+                    try:
+                        dropzone_link = self.page.locator("a[id*='cilDzMsg'], a[title='Add File']").first
+                        dropzone_link.click()
+                        self.page.wait_for_timeout(500)
+                        
+                        add_file_menu = self.page.locator("tr[id*='miDzAddFi'], [role='menuitem']:has-text('Add File')").first
+                        
+                        # Use file chooser handler
+                        with self.page.expect_file_chooser() as fc_info:
+                            add_file_menu.click()
+                        file_chooser = fc_info.value
+                        file_chooser.set_files(receipt_path)
+                        
+                        if self.logger:
+                            self.logger.info("✅ File selected via file chooser")
+                        
+                        # Wait for upload
+                        self.page.wait_for_load_state("networkidle", timeout=30000)
+                        if self.logger:
+                            self.logger.info("✅ Attachment uploaded")
+                    except Exception as e2:
+                        if self.logger:
+                            self.logger.warning(f"⚠️  Attachment upload failed: {e2}")
             elif receipt_path and not attachment_appeared:
                 if self.logger:
                     self.logger.warning("⚠️  Attachments dropzone not found, skipping upload")
