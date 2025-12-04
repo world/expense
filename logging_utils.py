@@ -182,3 +182,4 @@ class ExpenseLogger:
         with open(self.log_file, 'a', encoding='utf-8') as f:
             f.write(json.dumps(summary_data) + '\n')
 
+

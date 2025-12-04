@@ -56,6 +56,33 @@ class Config:
             llm.get('base_url')
         )
     
+    def fetch_available_models(self, api_key: str, base_url: str) -> List[str]:
+        """
+        Fetch available models from the LLM API.
+        
+        Args:
+            api_key: API key for authentication
+            base_url: Base URL for the API
+            
+        Returns:
+            List of available model IDs
+        """
+        try:
+            # Create temporary client
+            temp_client = OpenAI(api_key=api_key, base_url=base_url)
+            
+            # Fetch models
+            models = temp_client.models.list()
+            
+            # Extract model IDs and sort
+            model_ids = [model.id for model in models.data]
+            model_ids.sort()
+            
+            return model_ids
+        except Exception as e:
+            print(f"⚠️  Could not fetch models: {e}")
+            return []
+    
     def prompt_for_llm_config(self) -> Dict[str, str]:
         """
         Prompt user for missing LLM configuration values.
@@ -68,30 +95,62 @@ class Config:
         
         llm = self.get_llm_config()
         
-        # API Key
-        api_key = llm.get('api_key', '')
-        if not api_key:
-            api_key = input("Enter LLM API Key: ").strip()
-        else:
-            print(f"Using existing API key: {api_key[:10]}...")
-        
-        # Model
-        model = llm.get('model', 'gpt-4')
-        if not model:
-            model = input("Enter LLM Model [gpt-4]: ").strip() or "gpt-4"
-        else:
-            response = input(f"Use model '{model}'? [Y/n]: ").strip().lower()
-            if response == 'n':
-                model = input("Enter LLM Model: ").strip()
-        
-        # Base URL
+        # Base URL first (needed to query models)
         base_url = llm.get('base_url', 'https://api.openai.com/v1')
         if not base_url:
             base_url = input("Enter API Base URL [https://api.openai.com/v1]: ").strip() or "https://api.openai.com/v1"
         else:
-            response = input(f"Use base URL '{base_url}'? [Y/n]: ").strip().lower()
-            if response == 'n':
+            print(f"Using base URL: {base_url}")
+            response = input(f"Change base URL? [y/N]: ").strip().lower()
+            if response == 'y':
                 base_url = input("Enter API Base URL: ").strip()
+        
+        # API Key
+        api_key = llm.get('api_key', '')
+        if not api_key:
+            api_key = input("\nEnter LLM API Key: ").strip()
+        else:
+            print(f"\nUsing existing API key: {api_key[:10]}...")
+        
+        # Fetch available models
+        print("\n🔍 Fetching available models...")
+        available_models = self.fetch_available_models(api_key, base_url)
+        
+        # Model selection
+        model = llm.get('model', '')
+        
+        if available_models:
+            print(f"\n📋 Available models ({len(available_models)}):")
+            # Show first 10 models
+            display_count = min(10, len(available_models))
+            for i, m in enumerate(available_models[:display_count], 1):
+                print(f"  {i}. {m}")
+            
+            if len(available_models) > display_count:
+                print(f"  ... and {len(available_models) - display_count} more")
+            
+            default_model = available_models[0]
+            print(f"\nDefault: {default_model}")
+            
+            choice = input(f"Choose model number or type name [1]: ").strip()
+            
+            if not choice or choice == '1':
+                model = default_model
+            elif choice.isdigit() and 1 <= int(choice) <= len(available_models):
+                model = available_models[int(choice) - 1]
+            else:
+                # Assume they typed a model name
+                model = choice
+            
+            print(f"✅ Selected: {model}")
+        else:
+            # Fallback if we couldn't fetch models
+            if not model:
+                model = input("\nEnter LLM Model [gpt-4]: ").strip() or "gpt-4"
+            else:
+                response = input(f"\nUse model '{model}'? [Y/n]: ").strip().lower()
+                if response == 'n':
+                    model = input("Enter LLM Model: ").strip()
         
         result = {
             'api_key': api_key,

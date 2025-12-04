@@ -274,3 +274,4 @@ Return JSON only."""
         
         return data, all_warnings, ocr_text
 
+
