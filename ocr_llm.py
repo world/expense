@@ -1,168 +1,206 @@
 """
-OCR and LLM processing for receipts.
+Receipt processing using LLM vision APIs (Claude/OpenAI) or OCR fallback for other providers.
 """
+import base64
 import json
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import pytesseract
-from openai import OpenAI
-from anthropic import Anthropic
 from PIL import Image, ImageEnhance, ImageFilter
+import pytesseract
 
 
 class ReceiptProcessor:
-    """Handles OCR extraction and LLM analysis of receipts."""
+    """Handles receipt analysis using vision APIs or OCR fallback."""
     
     def __init__(self, llm_client: Any, model: str, expense_types: List[Dict[str, Any]], provider: str = "openai", logger=None):
         self.llm_client = llm_client
         self.model = model
         self.expense_types = expense_types
-        self.provider = provider  # "openai" or "anthropic"
+        self.provider = provider  # "openai", "anthropic", or "other"
         self.logger = logger
+        
+        # Determine if we can use vision API
+        self.use_vision = provider in ["openai", "anthropic"]
+    
+    # ========================
+    # VISION API METHODS
+    # ========================
+    
+    def encode_image_to_base64(self, image_path: Path) -> Tuple[str, str]:
+        """Encode image to base64 for vision API."""
+        suffix = image_path.suffix.lower()
+        media_types = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.heic': 'image/heic',
+        }
+        media_type = media_types.get(suffix, 'image/jpeg')
+        
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+        
+        base64_data = base64.standard_b64encode(image_data).decode('utf-8')
+        return base64_data, media_type
+    
+    def build_vision_prompt(self) -> str:
+        """Build prompt for vision-based receipt analysis."""
+        types_list = "\n".join([f'- {et["type_key"]}: "{et["type_label"]}"' for et in self.expense_types])
+        
+        return f"""Analyze this receipt image and extract expense information.
+
+AVAILABLE EXPENSE TYPES (use type_key exactly as shown):
+{types_list}
+
+INSTRUCTIONS:
+1. Read the receipt carefully - look for merchant name, date, and total amount
+2. Match the merchant to the most appropriate expense type:
+   - Coffee shops (Starbucks, Dunkin, etc.) → MEALS_BREAKFAST
+   - Lunch places (Chipotle, Subway, etc.) → MEALS_LUNCH  
+   - Dinner restaurants → MEALS_DINNER
+   - Uber/Lyft/rideshare → TRAVEL_GROUND_TRANSPORT
+   - Gas stations → TRAVEL_GASOLINE
+   - Parking → TRAVEL_PARKING
+   - Hotels → TRAVEL_HOTEL
+   - Airlines → TRAVEL_AIRFARE
+   - Taxis → TAXI
+   - If unclear → MISC_OTHER
+3. Extract the EXACT date shown on receipt in DD-MM-YYYY format
+4. Extract the total/final amount (not subtotal)
+5. Generate a 2-5 word description
+
+REQUIRED OUTPUT - Return ONLY this JSON (no markdown, no explanation):
+{{"type_key":"<exact key from list>","type_label":"<matching label>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
+
+If date is not visible, use today: {datetime.now().strftime('%d-%m-%Y')}
+If amount unclear, use 0.
+
+Example:
+{{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":9.58,"currency":"USD","date":"19-11-2024","description":"Coffee and pastry"}}"""
+    
+    def call_vision_api(self, image_path: Path) -> Tuple[Optional[str], Optional[str]]:
+        """Call Claude or OpenAI vision API with receipt image."""
+        try:
+            base64_data, media_type = self.encode_image_to_base64(image_path)
+            prompt = self.build_vision_prompt()
+            
+            if self.provider == "anthropic":
+                response = self.llm_client.messages.create(
+                    model=self.model,
+                    max_tokens=500,
+                    temperature=0,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": base64_data
+                                }
+                            },
+                            {"type": "text", "text": prompt}
+                        ]
+                    }]
+                )
+                return response.content[0].text.strip(), None
+            else:
+                # OpenAI Vision
+                response = self.llm_client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=500,
+                    temperature=0,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{media_type};base64,{base64_data}",
+                                    "detail": "high"
+                                }
+                            },
+                            {"type": "text", "text": prompt}
+                        ]
+                    }]
+                )
+                return response.choices[0].message.content.strip(), None
+                
+        except Exception as e:
+            return None, f"Vision API call failed: {str(e)}"
+    
+    # ========================
+    # OCR FALLBACK METHODS
+    # ========================
     
     def preprocess_image(self, image: Image.Image) -> Image.Image:
-        """
-        Preprocess image for better OCR results.
-        
-        Args:
-            image: PIL Image object
-            
-        Returns:
-            Preprocessed PIL Image
-        """
-        # Convert to grayscale
+        """Preprocess image for better OCR results."""
         image = image.convert('L')
-        
-        # Enhance contrast
         enhancer = ImageEnhance.Contrast(image)
         image = enhancer.enhance(2.0)
-        
-        # Sharpen
         image = image.filter(ImageFilter.SHARPEN)
-        
         return image
     
-    def extract_text_from_image(self, image_path: Path) -> Tuple[str, List[str]]:
-        """
-        Extract text from receipt image using OCR.
-        
-        Args:
-            image_path: Path to receipt image
-            
-        Returns:
-            Tuple of (extracted_text, warnings)
-        """
-        warnings = []
-        
+    def extract_text_ocr(self, image_path: Path) -> Tuple[str, Optional[str]]:
+        """Extract text from receipt using Tesseract OCR (fallback for non-vision providers)."""
         try:
-            # Load image
             image = Image.open(image_path)
-            
-            # Preprocess
             processed = self.preprocess_image(image)
-            
-            # Run OCR
             text = pytesseract.image_to_string(processed)
             
             if not text or len(text.strip()) < 10:
-                warnings.append("OCR extracted very little text - image may be low quality")
+                return "", "OCR extracted very little text - image may be low quality"
             
-            if self.logger:
-                self.logger.debug(f"OCR extracted {len(text)} characters from {image_path.name}")
-            
-            return text.strip(), warnings
-            
+            return text.strip(), None
         except Exception as e:
-            error_msg = f"OCR failed for {image_path.name}: {str(e)}"
-            if self.logger:
-                self.logger.error(error_msg)
-            warnings.append(error_msg)
-            return "", warnings
+            return "", f"OCR failed: {str(e)}"
     
-    def build_llm_prompt(self, ocr_text: str) -> List[Dict[str, str]]:
-        """
-        Build LLM prompt for receipt analysis.
+    def build_ocr_prompt(self, ocr_text: str) -> str:
+        """Build prompt for OCR-based text analysis."""
+        types_list = "\n".join([f'- {et["type_key"]}: "{et["type_label"]}"' for et in self.expense_types])
         
-        Args:
-            ocr_text: Text extracted from receipt via OCR
-            
-        Returns:
-            List of message dicts for OpenAI chat completion
-        """
-        # Build clean list of expense types
-        types_list = []
-        for et in self.expense_types:
-            types_list.append(f"  - {et['type_key']}: \"{et['type_label']}\"")
-        types_text = "\n".join(types_list)
-        
-        system_prompt = f"""You are an expert at analyzing receipt text and extracting structured expense information.
+        return f"""Analyze this receipt text and extract expense information.
 
-Available expense types:
-{types_text}
-
-Your task:
-1. FIRST, identify the merchant/vendor name from the receipt
-2. INFER the most appropriate expense type based on what kind of business the merchant is:
-   - Coffee shops (Starbucks, Dunkin) → Meals-Breakfast and Tip
-   - Lunch places (Chipotle, Subway) → Meals-Lunch and Tip
-   - Restaurants (dinner) → Meals-Dinner and Tip
-   - Airlines → Travel-Airfare
-   - Hotels → Travel-Hotel Accommodation
-   - Uber/Lyft → Travel-Non-Car Rental Ground Transport
-   - Gas stations → Travel-Gasoline
-   - Parking → Travel-Parking And Tolls
-   - Taxis → Taxi
-   - Office stores → Office And Print Supplies
-   - Software/subscriptions → Software
-   - Phone carriers → Mobile Phone
-   - Shipping services → Shipping
-   - Training/courses → Training
-   - If unclear → Miscellaneous Other
-3. Extract the total amount (as a number)
-4. Identify the currency (default to USD if unclear)
-5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
-6. Generate a concise description (max 50 chars)
-
-Return a single JSON object with these 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description
-
-Valid type_key values (match EXACTLY):
-{chr(10).join([f'- {et["type_key"]}: "{et["type_label"]}"' for et in self.expense_types])}
-
-Rules:
-- Date format: DD-MM-YYYY (e.g., "15-01-2025"). If no date on receipt, use: {datetime.now().strftime('%d-%m-%Y')}
-- Description: 2-5 words describing the expense (e.g., "Coffee and snack")
-- Match type_key to merchant's business (Starbucks=MEALS_BREAKFAST, Uber=TRAVEL_GROUND_TRANSPORT, etc.)
-- Return ONLY valid JSON, no markdown, no explanations
-
-Example: {{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":15.75,"currency":"USD","date":"04-12-2025","description":"Coffee and snack"}}"""
-
-        user_prompt = f"""Receipt OCR text:
+RECEIPT TEXT:
 {ocr_text}
 
-Return JSON with all 7 fields. Use today's date ({datetime.now().strftime('%d-%m-%Y')}) if no date visible."""
+AVAILABLE EXPENSE TYPES:
+{types_list}
 
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
+Return ONLY this JSON (no markdown):
+{{"type_key":"<key>","type_label":"<label>","merchant":"<name>","total_amount":<number>,"currency":"USD","date":"<DD-MM-YYYY>","description":"<2-5 words>"}}
+
+If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
+    
+    def call_text_llm(self, prompt: str) -> Tuple[Optional[str], Optional[str]]:
+        """Call LLM with text prompt (for OCR fallback)."""
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=500
+            )
+            return response.choices[0].message.content.strip(), None
+        except Exception as e:
+            return None, f"LLM call failed: {str(e)}"
+    
+    # ========================
+    # RESPONSE PARSING
+    # ========================
     
     def parse_llm_response(self, response_text: str) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-        """
-        Parse LLM JSON response.
-        
-        Args:
-            response_text: Raw LLM response
-            
-        Returns:
-            Tuple of (parsed_data_dict, warnings)
-        """
+        """Parse JSON response from LLM."""
         warnings = []
         
         try:
-            # Try to extract JSON if wrapped in markdown code blocks
+            # Extract JSON from markdown if needed
             if "```json" in response_text:
                 match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
                 if match:
@@ -172,227 +210,131 @@ Return JSON with all 7 fields. Use today's date ({datetime.now().strftime('%d-%m
                 if match:
                     response_text = match.group(1)
             
-            # Parse JSON
             data = json.loads(response_text.strip())
             
-            # Validate all 7 required fields
+            # Validate required fields
             required = ['type_key', 'type_label', 'merchant', 'total_amount', 'currency', 'date', 'description']
-            missing = [field for field in required if field not in data or data[field] is None or str(data[field]).strip() == '']
+            missing = [f for f in required if f not in data or data[f] is None or str(data[f]).strip() == '']
             if missing:
-                warnings.append(f"LLM response missing required fields: {missing}")
+                warnings.append(f"Missing required fields: {missing}")
                 return None, warnings
             
-            # Validate amount
+            # Fix amount
             try:
-                data['total_amount'] = float(data['total_amount'])
-                if data['total_amount'] < 0:
-                    warnings.append("Amount is negative, using absolute value")
-                    data['total_amount'] = abs(data['total_amount'])
+                data['total_amount'] = abs(float(data['total_amount']))
             except (ValueError, TypeError):
                 warnings.append(f"Invalid amount: {data.get('total_amount')}")
                 data['total_amount'] = 0.0
             
-            # Validate type against known types - don't fail, just fix it
+            # Fix type_key if invalid
             valid_keys = [et['type_key'] for et in self.expense_types]
             if data['type_key'] not in valid_keys:
-                # Find MISC_OTHER as fallback
                 misc_type = next((et for et in self.expense_types if 'OTHER' in et['type_key'].upper()), None)
                 if misc_type:
                     data['type_key'] = misc_type['type_key']
                     data['type_label'] = misc_type['type_label']
                 else:
-                    # Absolute fallback
                     data['type_key'] = self.expense_types[0]['type_key']
                     data['type_label'] = self.expense_types[0]['type_label']
-                # This is a warning but not a failure - don't add to warnings list that triggers retry
             
-            # Validate description is concise - auto-fix without warning
+            # Truncate long description
             if data['description'] and len(data['description']) > 100:
                 data['description'] = data['description'][:50].strip()
             
-            # Parse and normalize date
+            # Validate date
             date_value = data.get('date')
-            if date_value and str(date_value).lower() not in ['null', 'none', '']:
-                try:
-                    # Remove any None or 'null' string values
-                    if str(date_value).lower() in ['null', 'none']:
-                        data['date'] = None
-                    else:
-                        # Try multiple date formats
-                        date_str = str(date_value)
-                        parsed_date = None
-                        
-                        # Try DD-MM-YYYY (target format)
-                        for fmt in ['%d-%m-%Y', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y']:
-                            try:
-                                parsed_date = datetime.strptime(date_str, fmt)
-                                break
-                            except ValueError:
-                                continue
-                        
-                        if parsed_date:
-                            # Validate year is reasonable (OCR often misreads years)
-                            current_year = datetime.now().year
-                            year = parsed_date.year
-                            
-                            # Year should be within reasonable range: past 5 years to next year
-                            if year < (current_year - 5) or year > (current_year + 1):
-                                # Try to fix common OCR mistakes
-                                # 2095 -> 2024, 2029 -> 2024, etc.
-                                fixed_year = current_year
-                                
-                                # Try smart fixes first
-                                last_digit = year % 10
-                                if abs(last_digit - (current_year % 10)) <= 1:
-                                    # Last digit is close, use current year
-                                    fixed_year = (year // 10) * 10 + (current_year % 10)
-                                
-                                # If still bad, just use current year
-                                if fixed_year < (current_year - 5) or fixed_year > (current_year + 1):
-                                    fixed_year = current_year
-                                
-                                # Apply fix
-                                parsed_date = parsed_date.replace(year=fixed_year)
-                                if self.logger:
-                                    self.logger.debug(f"Fixed OCR date year from {year} to {fixed_year}")
-                            
-                            # Convert to DD-MM-YYYY format
-                            data['date'] = parsed_date.strftime('%d-%m-%Y')
-                        else:
-                            # Could not parse date - use today
-                            if self.logger:
-                                self.logger.debug(f"Could not parse date '{date_value}', using today")
-                            data['date'] = datetime.now().strftime('%d-%m-%Y')
-                except (ValueError, TypeError) as e:
-                    if self.logger:
-                        self.logger.debug(f"Date parsing error: {e}, using today")
+            if date_value:
+                parsed_date = None
+                for fmt in ['%d-%m-%Y', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%m-%d-%Y']:
+                    try:
+                        parsed_date = datetime.strptime(str(date_value), fmt)
+                        break
+                    except ValueError:
+                        continue
+                
+                if parsed_date:
+                    current_year = datetime.now().year
+                    if parsed_date.year < (current_year - 2) or parsed_date.year > (current_year + 1):
+                        warnings.append(f"Date year {parsed_date.year} seems incorrect")
+                    data['date'] = parsed_date.strftime('%d-%m-%Y')
+                else:
+                    warnings.append(f"Could not parse date: {date_value}")
                     data['date'] = datetime.now().strftime('%d-%m-%Y')
             else:
-                # No date provided - use today
                 data['date'] = datetime.now().strftime('%d-%m-%Y')
             
             return data, warnings
             
         except json.JSONDecodeError as e:
-            warnings.append(f"LLM response is not valid JSON: {e}")
-            if self.logger:
-                self.logger.error(f"Invalid JSON from LLM: {response_text[:200]}")
+            warnings.append(f"Invalid JSON: {e}")
             return None, warnings
         except Exception as e:
-            warnings.append(f"Error parsing LLM response: {e}")
+            warnings.append(f"Parse error: {e}")
             return None, warnings
     
-    def call_llm_with_retry(self, messages: List[Dict[str, str]], max_retries: int = 3) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Call LLM with retry logic for malformed responses.
-        
-        Returns:
-            Tuple of (llm_response, error_message)
-        """
-        for attempt in range(max_retries):
-            try:
-                if self.provider == "anthropic":
-                    response = self.llm_client.messages.create(
-                        model=self.model,
-                        max_tokens=500,
-                        temperature=0,
-                        messages=[{"role": "user", "content": messages[1]["content"]}]
-                    )
-                    llm_response = response.content[0].text.strip()
-                else:
-                    response = self.llm_client.chat.completions.create(
-                        model=self.model,
-                        messages=messages,
-                        temperature=0,
-                        max_tokens=500
-                    )
-                    llm_response = response.choices[0].message.content.strip()
-                
-                return llm_response, None
-                
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    if self.logger:
-                        self.logger.warning(f"LLM call attempt {attempt + 1} failed, retrying...")
-                    continue
-                else:
-                    return None, f"LLM API call failed after {max_retries} attempts: {str(e)}"
-        
-        return None, "Max retries exceeded"
+    # ========================
+    # MAIN ENTRY POINT
+    # ========================
     
     def analyze_receipt(self, image_path: Path) -> Tuple[Optional[Dict[str, Any]], List[str], str, Optional[str]]:
         """
-        Full pipeline: OCR + LLM analysis of a receipt.
+        Analyze receipt - uses Vision API for Claude/OpenAI, OCR fallback for others.
         
-        Args:
-            image_path: Path to receipt image
-            
         Returns:
-            Tuple of (parsed_data, warnings, raw_ocr_text, error_reason)
+            Tuple of (parsed_data, warnings, raw_response, error_reason)
         """
         all_warnings = []
-        error_reason = None
         
-        # Step 1: OCR
-        ocr_text, ocr_warnings = self.extract_text_from_image(image_path)
-        all_warnings.extend(ocr_warnings)
-        
-        if not ocr_text:
-            error_reason = "No text extracted from image via OCR"
-            all_warnings.append(error_reason)
-            return None, all_warnings, "", error_reason
-        
-        # Step 2: Build LLM prompt
-        messages = self.build_llm_prompt(ocr_text)
-        
-        # Step 3: Call LLM with retry for missing fields
-        max_attempts = 3
-        for attempt in range(max_attempts):
+        if self.use_vision:
+            # Use Vision API (Claude or OpenAI)
             if self.logger:
-                self.logger.debug(f"Calling LLM for {image_path.name}... (attempt {attempt + 1}/{max_attempts})")
+                self.logger.info(f"📸 Sending image to {self.provider.upper()} Vision API...")
             
-            llm_response, error = self.call_llm_with_retry(messages)
+            for attempt in range(2):
+                response_text, error = self.call_vision_api(image_path)
+                
+                if error:
+                    if attempt == 0:
+                        if self.logger:
+                            self.logger.warning(f"Vision API failed, retrying... ({error})")
+                        continue
+                    return None, [error], "", error
+                
+                data, parse_warnings = self.parse_llm_response(response_text)
+                if data:
+                    data['_raw_llm_response'] = response_text
+                    all_warnings.extend(parse_warnings)
+                    return data, all_warnings, response_text, None
+                else:
+                    if attempt == 0:
+                        continue
+                    all_warnings.extend(parse_warnings)
+                    return None, all_warnings, response_text, parse_warnings[0] if parse_warnings else "Parse failed"
+            
+            return None, all_warnings, "", "Max attempts exceeded"
+        
+        else:
+            # OCR Fallback for custom/other providers
+            if self.logger:
+                self.logger.info(f"🔍 Using OCR + text LLM (custom provider)...")
+            
+            ocr_text, ocr_error = self.extract_text_ocr(image_path)
+            if ocr_error:
+                all_warnings.append(ocr_error)
+            if not ocr_text:
+                return None, all_warnings, "", "OCR extracted no text from image"
+            
+            prompt = self.build_ocr_prompt(ocr_text)
+            response_text, error = self.call_text_llm(prompt)
             
             if error:
-                error_reason = error
-                all_warnings.append(error_reason)
-                if self.logger:
-                    self.logger.error(error_reason)
-                return None, all_warnings, ocr_text, error_reason
+                return None, [error], ocr_text, error
             
-            if self.logger:
-                self.logger.debug(f"LLM response received ({len(llm_response)} chars)")
-            
-            # Step 4: Parse response
-            data, parse_warnings = self.parse_llm_response(llm_response)
-            
+            data, parse_warnings = self.parse_llm_response(response_text)
             if data:
-                # Success! All required fields present
-                data['_raw_llm_response'] = llm_response
+                data['_raw_llm_response'] = response_text
+                all_warnings.extend(parse_warnings)
                 return data, all_warnings, ocr_text, None
             else:
-                # Check if it's a missing required field issue
-                if attempt < max_attempts - 1:
-                    # Retry with more explicit prompt
-                    if self.logger:
-                        self.logger.warning(f"⚠️  LLM response had issues. Retrying with more explicit instructions...")
-                        self.logger.debug(f"   Parse warnings: {parse_warnings}")
-                        self.logger.debug(f"   LLM response was: {llm_response[:300]}")
-                    
-                    # Add feedback about what was wrong
-                    feedback = "\n\nYour previous response had issues:\n"
-                    feedback += "\n".join(f"- {w}" for w in parse_warnings)
-                    feedback += "\n\nPlease return a VALID JSON object with ALL 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description"
-                    messages[1]["content"] += feedback
-                    continue
-                else:
-                    # Final attempt failed
-                    all_warnings.extend(parse_warnings)
-                    error_reason = f"LLM failed after {attempt + 1} attempts. Last error: {parse_warnings[0] if parse_warnings else 'Unknown'}"
-                    if self.logger:
-                        self.logger.error(f"   Final LLM response was: {llm_response}")
-                    return None, all_warnings, ocr_text, error_reason
-        
-        return None, all_warnings, ocr_text, "Max parsing attempts exceeded"
-
-
+                all_warnings.extend(parse_warnings)
+                return None, all_warnings, ocr_text, parse_warnings[0] if parse_warnings else "Parse failed"
