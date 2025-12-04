@@ -78,18 +78,21 @@ class Config:
                 
                 temp_client = Anthropic(api_key=api_key)
                 
-                # Common Claude models to test (from newest to oldest)
+                # Claude models to test (from newest to oldest)
                 test_models = [
+                    # Claude 4.x (newest - 2025)
+                    "claude-sonnet-4-20250514",
+                    "claude-opus-4-20250514",
+                    # Claude 3.5 (2024)
                     "claude-3-5-sonnet-20241022",
                     "claude-3-5-sonnet-latest",
-                    "claude-3-5-haiku-20241022", 
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-5-haiku-latest",
+                    # Claude 3 (2024)
                     "claude-3-opus-20240229",
+                    "claude-3-opus-latest",
                     "claude-3-sonnet-20240229",
                     "claude-3-haiku-20240307",
-                    "claude-3-5-sonnet-20240620",
-                    "claude-3-opus-latest",
-                    "claude-3-sonnet-latest",
-                    "claude-3-haiku-latest"
                 ]
                 
                 available = []
