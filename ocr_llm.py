@@ -103,12 +103,17 @@ class ReceiptProcessor:
         
         system_prompt = f"""You are an expert at analyzing receipt text and extracting structured expense information.
 
-Available expense types:
+Available expense types (with example keywords):
 {types_text}
 
 Your task:
-1. Choose the BEST matching expense type based on the receipt content
-2. Extract the merchant/vendor name
+1. FIRST, identify the merchant/vendor name from the receipt
+2. INFER the expense type by analyzing what kind of business the merchant is:
+   - Starbucks, Dunkin, McDonald's, restaurants → MEAL
+   - Uber, Lyft, Shell, parking garages → TRANSPORT
+   - Marriott, Hilton, Airbnb → HOTEL
+   - Staples, Office Depot, paper/pens → SUPPLIES
+   - If unclear → OTHER
 3. Extract the total amount (as a number)
 4. Identify the currency (default to USD if unclear)
 5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
