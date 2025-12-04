@@ -484,51 +484,71 @@ class OracleBrowserAgent:
                 self.logger.info(f"📋 Filling type: {expense_type}")
             type_filled = False
             
-            # Try standard select first (quick check)
-            standard_selectors = [
-                "select[id*='type' i]",
-                "select[name*='type' i]"
+            # Oracle uses a custom LOV (List of Values) dropdown
+            # Try to find and click the Type field to open dropdown
+            type_field_selectors = [
+                "input[id*='xpenseType' i]",
+                "input[id*='type' i]",
+                "[id*='type' i][role='combobox']",
+                "//label[contains(text(),'Type')]/following::input[1]"
             ]
-            for sel in standard_selectors:
-                try:
-                    loc = self.page.locator(sel).first
-                    if loc.is_visible(timeout=500):  # Quick 500ms check
-                        loc.select_option(label=expense_type)
-                        type_filled = True
-                        break
-                except:
-                    continue
             
-            # Oracle often uses custom dropdown - try clicking and selecting from list
-            if not type_filled:
-                oracle_dropdown_selectors = [
-                    "[id*='Type' i][class*='select']",
-                    "[id*='type' i][role='combobox']",
-                    "//label[contains(text(),'Type')]/following::*[contains(@class,'select')][1]",
-                    "//label[contains(text(),'Type')]/following::input[1]"
-                ]
-                for sel in oracle_dropdown_selectors:
-                    try:
-                        if sel.startswith("//"):
-                            loc = self.page.locator(f"xpath={sel}").first
-                        else:
-                            loc = self.page.locator(sel).first
-                        if loc.is_visible(timeout=500):  # Quick check
-                            loc.click()
-                            time.sleep(0.3)  # Brief wait for dropdown to open
-                            # Try to click the option from the dropdown list
-                            option = self.page.locator(f"text={expense_type}").first
-                            if option.is_visible(timeout=1000):
+            for sel in type_field_selectors:
+                try:
+                    if sel.startswith("//"):
+                        loc = self.page.locator(f"xpath={sel}").first
+                    else:
+                        loc = self.page.locator(sel).first
+                    
+                    if loc.is_visible(timeout=200):  # Very quick check
+                        loc.click()
+                        time.sleep(0.2)  # Brief wait for dropdown
+                        
+                        # Type to filter and select
+                        loc.fill(expense_type)
+                        time.sleep(0.2)
+                        
+                        # Press Enter or Tab to confirm, or click matching option
+                        try:
+                            option = self.page.locator(f"li:has-text('{expense_type}'), [role='option']:has-text('{expense_type}')").first
+                            if option.is_visible(timeout=500):
                                 option.click()
                                 type_filled = True
                                 break
-                    except:
-                        continue
+                        except:
+                            # Try pressing Enter to confirm
+                            loc.press("Enter")
+                            type_filled = True
+                            break
+                except:
+                    continue
             
             if not type_filled and self.logger:
                 self.logger.warning("Could not fill Type field")
             
-            # Wait for attachments section to appear after type selection
+            # Find Amount field and CLICK into it (this triggers attachments to appear)
+            if self.logger:
+                self.logger.info(f"💵 Clicking into Amount field...")
+            amount_loc = None
+            amount_selectors = [
+                "input[id*='amount' i]",
+                "input[name*='amount' i]",
+                "//label[contains(text(),'Amount')]/following::input[1]"
+            ]
+            for sel in amount_selectors:
+                try:
+                    if sel.startswith("//"):
+                        loc = self.page.locator(f"xpath={sel}").first
+                    else:
+                        loc = self.page.locator(sel).first
+                    if loc.is_visible(timeout=500):
+                        loc.click()  # Just click, don't fill yet
+                        amount_loc = loc
+                        break
+                except:
+                    continue
+            
+            # Now wait for attachments section to appear
             if self.logger:
                 self.logger.info("⏳ Waiting for attachments section...")
             attachment_selectors = [
@@ -538,7 +558,6 @@ class OracleBrowserAgent:
                 "input[type='file']"
             ]
             attachment_appeared = False
-            # Try all selectors with a single shared timeout (race them)
             try:
                 combined_selector = ", ".join(attachment_selectors)
                 self.page.locator(combined_selector).first.wait_for(state="visible", timeout=3000)
@@ -546,12 +565,11 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.info("✅ Attachments section appeared")
             except:
-                # Fallback to a brief wait
                 if self.logger:
                     self.logger.info("⏳ Attachments not detected, brief wait...")
                 time.sleep(0.5)
             
-            # Upload receipt attachment right after attachments section appears
+            # Upload receipt attachment
             if receipt_path:
                 if self.logger:
                     self.logger.info("📎 Uploading receipt attachment...")
@@ -559,27 +577,32 @@ class OracleBrowserAgent:
                 if not upload_success:
                     self.logger.warning("⚠️  Attachment upload failed, but continuing...")
             
-            # Fill Amount field
+            # Now fill the Amount value
             if self.logger:
                 self.logger.info(f"💵 Filling amount: {amount}")
             amount_filled = False
-            amount_selectors = [
-                "input[id*='amount' i]",
-                "input[name*='amount' i]",
-                "//label[contains(text(),'Amount')]/following::input[1]"
-            ]
-            for sel in amount_selectors:
+            if amount_loc:
                 try:
-                    if sel.startswith("//"):
-                        loc = self.page.locator(f"xpath={sel}")
-                    else:
-                        loc = self.page.locator(sel)
-                    if loc.first.is_visible(timeout=2000):
-                        loc.first.fill(str(amount))
-                        amount_filled = True
-                        break
+                    amount_loc.fill(str(amount))
+                    amount_filled = True
                 except:
-                    continue
+                    pass
+            
+            # Fallback if we didn't have the locator saved
+            if not amount_filled:
+                for sel in amount_selectors:
+                    try:
+                        if sel.startswith("//"):
+                            loc = self.page.locator(f"xpath={sel}").first
+                        else:
+                            loc = self.page.locator(sel).first
+                        if loc.is_visible(timeout=500):
+                            loc.fill(str(amount))
+                            amount_filled = True
+                            break
+                    except:
+                        continue
+            
             if not amount_filled and self.logger:
                 self.logger.warning("Could not fill Amount field")
             
