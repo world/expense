@@ -36,8 +36,11 @@ def get_last_used_folder() -> Optional[Path]:
                 last_path = f.read().strip()
                 if last_path and Path(last_path).exists():
                     return Path(last_path)
-        except:
-            pass
+                elif last_path:
+                    # Path was saved but no longer exists
+                    print(f"ℹ️  Previous folder no longer exists: {last_path}")
+        except Exception as e:
+            print(f"⚠️  Could not read folder preference: {e}")
     return None
 
 def save_last_used_folder(folder_path: Path):
@@ -46,7 +49,9 @@ def save_last_used_folder(folder_path: Path):
     try:
         with open(cache_file, 'w') as f:
             f.write(str(folder_path))
-    except:
+        print(f"💾 Remembered folder for next time: {folder_path}")
+    except Exception as e:
+        print(f"⚠️  Could not save folder preference: {e}")
         pass  # Don't fail if we can't save
 
 def select_receipts_folder() -> Path:
