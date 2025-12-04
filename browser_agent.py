@@ -80,50 +80,66 @@ class OracleBrowserAgent:
     def wait_for_login(self) -> bool:
         """
         Wait for user to complete login if needed.
-        Polls for post-login element.
+        Detects login by checking for expense-related elements on page.
         
         Returns:
             True if login detected
         """
-        login_config = self.config.get_selector('login_detection')
-        post_login_selector = login_config.get('post_login_element')
-        timeout_ms = login_config.get('timeout_ms', 60000)
+        timeout_ms = 60000
         
         if self.logger:
-            self.logger.info("Checking if login is required...")
+            self.logger.info("Checking if logged in...")
         
-        try:
-            # Check if already logged in
-            self.page.wait_for_selector(post_login_selector, timeout=5000)
+        # Look for any of these elements that indicate we're logged in
+        login_indicators = [
+            "text=Expense Reports",
+            "text=Travel and Expenses", 
+            "text=Create Report",
+            "text=Create Item",
+            "text=Available Expense Items"
+        ]
+        
+        def check_logged_in():
+            for selector in login_indicators:
+                try:
+                    if self.page.locator(selector).first.is_visible(timeout=1000):
+                        return True
+                except:
+                    pass
+            return False
+        
+        # Quick check if already logged in
+        if check_logged_in():
             if self.logger:
                 self.logger.info("✅ Already logged in!")
             self.is_logged_in = True
             return True
-        except PlaywrightTimeoutError:
-            pass
         
         # Need to log in
         if self.logger:
-            self.logger.warning("⚠️  Login required. Please complete login in the browser window.")
+            self.logger.warning("⚠️  Login required. Please log in...")
         
         print("\n" + "=" * 70)
         print("🔐 LOGIN REQUIRED")
         print("=" * 70)
-        print("Please log in to Oracle in the browser window that just opened.")
-        print("This script will automatically continue once you're logged in.")
+        print("Please log in to Oracle in the browser window.")
+        print("This script will continue automatically once you're logged in.")
         print("=" * 70 + "\n")
         
         # Poll for login completion
-        try:
-            self.page.wait_for_selector(post_login_selector, timeout=timeout_ms)
-            if self.logger:
-                self.logger.info("✅ Login detected!")
-            self.is_logged_in = True
-            return True
-        except PlaywrightTimeoutError:
-            if self.logger:
-                self.logger.error(f"Login timeout after {timeout_ms/1000}s")
-            return False
+        import time
+        start = time.time()
+        while (time.time() - start) < (timeout_ms / 1000):
+            if check_logged_in():
+                if self.logger:
+                    self.logger.info("✅ Login detected!")
+                self.is_logged_in = True
+                return True
+            time.sleep(2)
+        
+        if self.logger:
+            self.logger.error(f"Login timeout after {timeout_ms/1000}s")
+        return False
     
     def find_existing_report(self) -> Optional[str]:
         """
@@ -241,14 +257,34 @@ class OracleBrowserAgent:
             True if successful
         """
         if self.logger:
-            self.logger.info("Creating new expense report...")
-        
-        buttons = self.config.get_selector('buttons')
-        new_report_selector = buttons.get('new_report')
+            self.logger.info("🆕 Creating new expense report...")
         
         try:
-            # Click new report button
-            self.page.click(new_report_selector, timeout=10000)
+            # Try multiple selectors for the Create Report button
+            create_selectors = [
+                "text=Create Report",
+                "button:has-text('Create Report')",
+                "a:has-text('Create Report')",
+                "[aria-label*='Create Report']",
+                ".create-report"
+            ]
+            
+            clicked = False
+            for selector in create_selectors:
+                try:
+                    if self.page.locator(selector).first.is_visible(timeout=2000):
+                        self.page.locator(selector).first.click()
+                        clicked = True
+                        if self.logger:
+                            self.logger.info(f"✅ Clicked Create Report")
+                        break
+                except:
+                    continue
+            
+            if not clicked:
+                if self.logger:
+                    self.logger.error("Could not find Create Report button")
+                return False
             
             # If report name field exists, fill it
             if report_name:
