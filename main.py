@@ -7,8 +7,14 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from tkinter import Tk, filedialog
 from typing import List
+
+# Try to import tkinter for Finder dialog, but make it optional
+try:
+    from tkinter import Tk, filedialog
+    HAS_TKINTER = True
+except ImportError:
+    HAS_TKINTER = False
 
 from config import Config
 from logging_utils import ExpenseLogger
@@ -38,7 +44,8 @@ def select_receipts_folder() -> Path:
     print("Options:")
     print("  1. Press Enter to use default")
     print("  2. Type a custom path")
-    print("  3. Type 'f' to open Finder and browse")
+    if HAS_TKINTER:
+        print("  3. Type 'f' to open Finder and browse")
     print("=" * 70)
     
     choice = input("Your choice: ").strip()
@@ -46,7 +53,7 @@ def select_receipts_folder() -> Path:
     if not choice:
         # Use default
         folder_path = default_path
-    elif choice.lower() == 'f':
+    elif choice.lower() == 'f' and HAS_TKINTER:
         # Open Finder dialog
         print("\n🖱️  Opening Finder... (the window may appear behind other windows)")
         root = Tk()
@@ -65,6 +72,11 @@ def select_receipts_folder() -> Path:
             sys.exit(1)
         
         folder_path = Path(folder_path)
+    elif choice.lower() == 'f' and not HAS_TKINTER:
+        print("❌ Finder dialog not available (tkinter not installed)")
+        print("Please type the folder path instead:")
+        choice = input("Path: ").strip()
+        folder_path = Path(choice).expanduser()
     else:
         # Custom path
         folder_path = Path(choice).expanduser()

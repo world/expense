@@ -55,21 +55,31 @@ check-deps:
 	}
 	@echo "✅ Python 3 found: $$($(PYTHON) --version)"
 	@echo ""
+	@echo "Checking for Homebrew..."
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "❌ Homebrew not found. Please install Homebrew first:"; \
+		echo "   /bin/bash -c \"\$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""; \
+		echo "   Then run 'make setup' again."; \
+		exit 1; \
+	fi
+	@echo "✅ Homebrew found"
+	@echo ""
 	@echo "Checking for Tesseract OCR..."
 	@if ! command -v tesseract >/dev/null 2>&1; then \
 		echo "⚠️  Tesseract OCR not found. Installing..."; \
-		if command -v brew >/dev/null 2>&1; then \
-			echo "   Using Homebrew to install Tesseract..."; \
-			brew install tesseract; \
-			echo "✅ Tesseract installed successfully!"; \
-		else \
-			echo "❌ Homebrew not found. Please install Homebrew first:"; \
-			echo "   /bin/bash -c \"\$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""; \
-			echo "   Then run 'make setup' again."; \
-			exit 1; \
-		fi; \
+		brew install tesseract; \
+		echo "✅ Tesseract installed successfully!"; \
 	else \
 		echo "✅ Tesseract found: $$(tesseract --version | head -n1)"; \
+	fi
+	@echo ""
+	@echo "Checking for Python Tkinter (for Finder dialog)..."
+	@if ! $(PYTHON) -c "import tkinter" 2>/dev/null; then \
+		echo "⚠️  Python Tkinter not found. Installing python-tk..."; \
+		brew install python-tk@3.13 || brew install python-tk; \
+		echo "✅ Python Tkinter installed successfully!"; \
+	else \
+		echo "✅ Python Tkinter found"; \
 	fi
 	@echo ""
 	@echo "✅ All dependencies ready!"
