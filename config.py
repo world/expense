@@ -83,7 +83,7 @@ class Config:
             print(f"⚠️  Could not fetch models: {e}")
             return []
     
-    def prompt_for_llm_config(self) -> Dict[str, str]:
+    def prompt_for_llm_config(self) -> Optional[Dict[str, str]]:
         """
         Prompt user for missing LLM configuration values.
         
@@ -121,15 +121,54 @@ class Config:
         print(f"✅ Selected: {provider_name}")
         print(f"   Base URL: {base_url}")
         
-        # API Key
+        # API Key with validation loop
         api_key = llm.get('api_key', '')
-        if not api_key:
-            api_key = input(f"\nEnter {provider_name} API Key: ").strip()
-        else:
-            print(f"\nUsing existing API key: {api_key[:10]}...")
-            response = input("Use this key? [Y/n]: ").strip().lower()
-            if response == 'n':
-                api_key = input(f"Enter {provider_name} API Key: ").strip()
+        key_valid = False
+        max_attempts = 3
+        attempt = 0
+        
+        while not key_valid and attempt < max_attempts:
+            attempt += 1
+            
+            if not api_key or attempt > 1:
+                api_key = input(f"\nEnter {provider_name} API Key: ").strip()
+            else:
+                print(f"\nUsing existing API key: {api_key[:10]}...")
+                response = input("Use this key? [Y/n]: ").strip().lower()
+                if response == 'n':
+                    api_key = input(f"Enter {provider_name} API Key: ").strip()
+            
+            # Validate the API key
+            print("🔐 Validating API key...")
+            try:
+                # Create temporary client and make a simple test call
+                temp_client = OpenAI(api_key=api_key, base_url=base_url)
+                
+                # Try to list models as validation
+                temp_client.models.list()
+                
+                print("✅ API key is valid!")
+                key_valid = True
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "authentication" in error_msg or "unauthorized" in error_msg or "invalid" in error_msg or "401" in error_msg:
+                    print(f"❌ Invalid API key: Authentication failed")
+                    if attempt < max_attempts:
+                        print(f"   Please try again ({attempt}/{max_attempts} attempts)")
+                    api_key = ""  # Clear invalid key
+                else:
+                    print(f"⚠️  Could not validate key: {e}")
+                    # Allow continuing with unvalidated key for non-auth errors
+                    response = input("Continue anyway? [y/N]: ").strip().lower()
+                    if response == 'y':
+                        key_valid = True
+                    else:
+                        api_key = ""
+        
+        if not key_valid:
+            print(f"\n❌ Failed to authenticate after {max_attempts} attempts.")
+            print("Please check your API key and try again.")
+            return None
         
         # Fetch available models
         print("\n🔍 Fetching available models...")
@@ -266,33 +305,34 @@ class Config:
         if not self.is_llm_configured():
             if logger:
                 logger.warning("LLM not configured in config.json")
-            self.prompt_for_llm_config()
-        
-        # Test connection (with retry)
-        max_attempts = 3
-        for attempt in range(1, max_attempts + 1):
-            success, error = self.test_llm_connection(logger)
+            result = self.prompt_for_llm_config()
             
-            if success:
-                return True
-            
-            if attempt < max_attempts:
+            # If prompt_for_llm_config returns None, authentication failed
+            if result is None:
                 if logger:
-                    logger.warning(f"Attempt {attempt}/{max_attempts} failed. Please check your LLM settings.")
-                else:
-                    print(f"\nAttempt {attempt}/{max_attempts} failed. Please check your LLM settings.")
-                
-                retry = input("Would you like to re-enter LLM configuration? [Y/n]: ").strip().lower()
-                if retry != 'n':
-                    self.prompt_for_llm_config()
-                else:
-                    return False
-            else:
-                if logger:
-                    logger.error("Max attempts reached. Cannot proceed without working LLM connection.")
-                else:
-                    print("\n❌ Max attempts reached. Cannot proceed without working LLM connection.")
+                    logger.error("Failed to configure LLM. Cannot proceed.")
                 return False
+        
+        # Test connection with a simple call
+        success, error = self.test_llm_connection(logger)
+        
+        if success:
+            return True
+        
+        # If test fails after successful key validation, offer to reconfigure
+        if logger:
+            logger.error(f"LLM connection test failed: {error}")
+        else:
+            print(f"\n❌ LLM connection test failed: {error}")
+        
+        retry = input("Would you like to re-enter LLM configuration? [Y/n]: ").strip().lower()
+        if retry != 'n':
+            result = self.prompt_for_llm_config()
+            if result is None:
+                return False
+            # Test again
+            success, error = self.test_llm_connection(logger)
+            return success
         
         return False
     
