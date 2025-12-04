@@ -467,37 +467,30 @@ class OracleBrowserAgent:
             if not date_filled and self.logger:
                 self.logger.warning("Could not fill Date field")
             
-            # Fill Type dropdown - wait for it to be enabled after date entry
+            # Fill Type dropdown - it's a <select> with ExpenseTypeId in the id
             if self.logger:
                 self.logger.info(f"📋 Filling type: {expense_type}")
             type_filled = False
             
-            type_selector = "input[id*='xpenseType' i], input[id*='type' i], [id*='type' i][role='combobox']"
+            # Oracle uses select element with ExpenseTypeId in the id
+            type_selector = "select[id*='ExpenseTypeId'], select[id*='expenseType' i], select[id*='type' i]"
             
             try:
                 type_loc = self.page.locator(type_selector).first
-                # Smart wait: wait for element to be enabled (not just visible)
                 type_loc.wait_for(state="visible", timeout=2000)
                 
-                # Wait until enabled (polling)
-                for _ in range(10):  # Max 1 second (10 x 100ms)
-                    if type_loc.is_enabled():
+                # Wait for options to load (more than just the empty default)
+                for _ in range(20):  # Max 2 seconds
+                    options_count = type_loc.locator("option").count()
+                    if options_count > 1:
                         break
-                    self.page.wait_for_timeout(100)  # Playwright's non-blocking wait
+                    self.page.wait_for_timeout(100)
                 
-                type_loc.click()
-                type_loc.fill(expense_type)
-                
-                # Try to click matching option or press Enter
-                option_selector = f"li:has-text('{expense_type}'), [role='option']:has-text('{expense_type}')"
-                try:
-                    option = self.page.locator(option_selector).first
-                    option.wait_for(state="visible", timeout=500)
-                    option.click()
-                    type_filled = True
-                except:
-                    type_loc.press("Enter")
-                    type_filled = True
+                # Use select_option with the label text
+                type_loc.select_option(label=expense_type)
+                type_filled = True
+                if self.logger:
+                    self.logger.info(f"✅ Selected type: {expense_type}")
             except Exception as e:
                 if self.logger:
                     self.logger.warning(f"Type fill error: {e}")
