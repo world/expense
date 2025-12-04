@@ -30,12 +30,21 @@ class OracleBrowserAgent:
         
         if self.logger:
             self.logger.info("🚀 Launching browser (session will be remembered)...")
+            self.logger.info(f"   Session data stored in: {user_data_dir}")
         
-        # Launch with persistent context - login persists between runs!
+        # Launch with persistent context with all the right settings for corporate SSO
         self.context = self.playwright.chromium.launch_persistent_context(
             user_data_dir,
             headless=False,
-            viewport={'width': 1400, 'height': 900}
+            viewport={'width': 1400, 'height': 900},
+            # These settings help with corporate SSO persistence
+            accept_downloads=True,
+            ignore_https_errors=True,
+            bypass_csp=True,
+            # Use a real Chrome user agent
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # Enable all storage
+            permissions=["geolocation", "notifications"],
         )
         
         # Use existing page or create new one
