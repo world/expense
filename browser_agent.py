@@ -500,6 +500,35 @@ class OracleBrowserAgent:
             if not type_filled and self.logger:
                 self.logger.warning("Could not fill Type field")
             
+            # Wait for attachments section to appear after type selection
+            if self.logger:
+                self.logger.info("⏳ Waiting for attachments section...")
+            attachment_selectors = [
+                "text=Attachments",
+                "button:has-text('Add Attachment')",
+                "button:has-text('Attach')",
+                "input[type='file']",
+                "[class*='attachment']",
+                "[id*='attachment']"
+            ]
+            attachment_appeared = False
+            for sel in attachment_selectors:
+                try:
+                    loc = self.page.locator(sel).first
+                    loc.wait_for(state="visible", timeout=5000)
+                    attachment_appeared = True
+                    if self.logger:
+                        self.logger.info("✅ Attachments section appeared")
+                    break
+                except:
+                    continue
+            
+            if not attachment_appeared:
+                # Fallback to a brief wait if we couldn't detect the section
+                if self.logger:
+                    self.logger.info("⏳ Attachments section not detected, waiting 1s...")
+                time.sleep(1)
+            
             # Fill Amount field
             if self.logger:
                 self.logger.info(f"💵 Filling amount: {amount}")
@@ -551,38 +580,74 @@ class OracleBrowserAgent:
         Returns:
             True if button found and clicked
         """
-        buttons = self.config.get_selector('buttons')
-        create_another_selector = buttons.get('create_another')
+        if self.logger:
+            self.logger.info("➕ Clicking 'Create Another'...")
+        
+        create_another_selectors = [
+            "text=Create Another",
+            "button:has-text('Create Another')",
+            "a:has-text('Create Another')",
+            "input[value*='Create Another']"
+        ]
         
         try:
-            self.page.click(create_another_selector, timeout=5000)
-            time.sleep(1)
+            for selector in create_another_selectors:
+                try:
+                    loc = self.page.locator(selector).first
+                    if loc.is_visible(timeout=2000):
+                        loc.click()
+                        if self.logger:
+                            self.logger.info("✅ Clicked Create Another")
+                        time.sleep(2)
+                        return True
+                except:
+                    continue
+            
             if self.logger:
-                self.logger.debug("Clicked 'Create Another'")
-            return True
-        except:
+                self.logger.warning("Could not find 'Create Another' button")
+            return False
+        except Exception as e:
             if self.logger:
-                self.logger.debug("'Create Another' button not found")
+                self.logger.warning(f"Create Another failed: {e}")
             return False
     
     def click_save_and_close(self) -> bool:
         """
-        Click 'Save and Close' button.
+        Click 'Save and Close' button to finish.
         
         Returns:
-            True if successful
+            True if button found and clicked
         """
-        buttons = self.config.get_selector('buttons')
-        save_close_selector = buttons.get('save_and_close')
+        if self.logger:
+            self.logger.info("💾 Clicking 'Save and Close'...")
+        
+        save_selectors = [
+            "text=Save and Close",
+            "button:has-text('Save and Close')",
+            "button:has-text('Save & Close')",
+            "a:has-text('Save and Close')",
+            "input[value*='Save']"
+        ]
         
         try:
-            self.page.click(save_close_selector, timeout=5000)
-            time.sleep(1)
+            for selector in save_selectors:
+                try:
+                    loc = self.page.locator(selector).first
+                    if loc.is_visible(timeout=2000):
+                        loc.click()
+                        if self.logger:
+                            self.logger.info("✅ Clicked Save and Close")
+                        time.sleep(2)
+                        return True
+                except:
+                    continue
+            
             if self.logger:
-                self.logger.info("Clicked 'Save and Close'")
-            return True
+                self.logger.warning("Could not find 'Save and Close' button")
+            return False
         except Exception as e:
             if self.logger:
-                self.logger.warning(f"Could not click 'Save and Close': {e}")
+                self.logger.warning(f"Save and Close failed: {e}")
             return False
+    
 
