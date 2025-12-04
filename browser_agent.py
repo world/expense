@@ -517,75 +517,68 @@ class OracleBrowserAgent:
             if not type_filled and self.logger:
                 self.logger.warning("Could not fill Type field")
             
-            # Click into Amount box
+            # After type is selected, attachments dropzone should appear
             if self.logger:
-                self.logger.info(f"💵 Clicking into Amount field...")
-            amount_selectors = [
-                "input[id*='amount' i]",
-                "input[name*='amount' i]",
-                "//label[contains(text(),'Amount')]/following::input[1]"
-            ]
-            amount_loc = None
-            for sel in amount_selectors:
-                try:
-                    if sel.startswith("//"):
-                        loc = self.page.locator(f"xpath={sel}").first
-                    else:
-                        loc = self.page.locator(sel).first
-                    if loc.is_visible(timeout=500):
-                        loc.click()
-                        amount_loc = loc
-                        break
-                except:
-                    continue
+                self.logger.info("⏳ Waiting for attachments dropzone (appears after type)...")
             
-            # Fill Amount value
-            if self.logger:
-                self.logger.info(f"💵 Filling amount: {amount}")
-            amount_filled = False
-            if amount_loc:
-                try:
-                    amount_loc.fill(str(amount))
-                    amount_filled = True
-                except:
-                    pass
-            
-            if not amount_filled and self.logger:
-                self.logger.warning("Could not fill Amount field")
-            
-            # Now check if Attachments have appeared
-            if self.logger:
-                self.logger.info("⏳ Checking for attachments section...")
-            attachment_selectors = [
-                "text=Attachments",
-                "button:has-text('Add Attachment')",
-                "button:has-text('Attach')",
-                "input[type='file']"
+            # Oracle uses FndDropzone class for attachments
+            dropzone_selectors = [
+                "div.FndDropzone",
+                "a[title='Add File']",
+                "img[title*='Drag files']",
+                "text=Drag files here or click to add attachment"
             ]
             attachment_appeared = False
             try:
-                combined_selector = ", ".join(attachment_selectors)
-                self.page.locator(combined_selector).first.wait_for(state="visible", timeout=2000)
+                combined_selector = ", ".join(dropzone_selectors)
+                self.page.locator(combined_selector).first.wait_for(state="visible", timeout=3000)
                 attachment_appeared = True
                 if self.logger:
-                    self.logger.info("✅ Attachments section appeared")
+                    self.logger.info("✅ Attachments dropzone appeared")
             except:
                 if self.logger:
-                    self.logger.info("⏳ Attachments not visible yet")
+                    self.logger.info("⏳ Attachments dropzone not visible yet")
             
-            # Upload receipt attachment if section appeared
+            # Upload receipt attachment via dropzone
             if receipt_path and attachment_appeared:
                 if self.logger:
                     self.logger.info("📎 Uploading receipt attachment...")
-                upload_success = self.upload_receipt_attachment(receipt_path)
-                if not upload_success:
-                    self.logger.warning("⚠️  Attachment upload failed, but continuing...")
+                try:
+                    # Click the dropzone/Add File link to open file picker
+                    add_file_link = self.page.locator("a[title='Add File'], div.FndDropzone").first
+                    add_file_link.click()
+                    self.page.wait_for_timeout(500)
+                    
+                    # Look for file input that should appear
+                    file_input = self.page.locator("input[type='file']").first
+                    file_input.set_input_files(receipt_path)
+                    
+                    # Wait for upload to complete
+                    self.page.wait_for_load_state("networkidle", timeout=10000)
+                    if self.logger:
+                        self.logger.info("✅ Attachment uploaded")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"⚠️  Attachment upload failed: {e}")
             elif receipt_path and not attachment_appeared:
                 if self.logger:
-                    self.logger.warning("⚠️  Attachments section not found, skipping upload")
+                    self.logger.warning("⚠️  Attachments dropzone not found, skipping upload")
             
-            if not amount_filled and self.logger:
-                self.logger.warning("Could not fill Amount field")
+            # NOW fill Amount (after attachments)
+            if self.logger:
+                self.logger.info(f"💵 Filling amount: {amount}")
+            amount_filled = False
+            amount_selector = "input[id*='ReceiptAmount'], input[id*='amount' i], input[name*='amount' i]"
+            try:
+                amount_loc = self.page.locator(amount_selector).first
+                amount_loc.wait_for(state="visible", timeout=2000)
+                amount_loc.fill(str(amount))
+                amount_filled = True
+                if self.logger:
+                    self.logger.info(f"✅ Filled amount: {amount}")
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(f"Could not fill Amount field: {e}")
             
             if self.logger:
                 self.logger.info("✅ Expense item fields filled")
