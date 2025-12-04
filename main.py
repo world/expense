@@ -266,6 +266,19 @@ def main():
         logger=logger
     )
     
+    # Get airport city from config (ask if not set) - needed for Purpose field
+    airport_city = config.config_data.get('airport_city', '')
+    if not airport_city:
+        print("\n" + "=" * 60)
+        print("🏠 AIRPORT CITY SETUP")
+        print("=" * 60)
+        airport_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
+        if airport_city:
+            config.config_data['airport_city'] = airport_city
+            config.save_config()
+            logger.info(f"✅ Saved airport city: {airport_city}")
+        print("=" * 60 + "\n")
+    
     # Initialize browser agent (skip in test mode)
     browser_agent = None
     if not args.test:
@@ -287,15 +300,6 @@ def main():
                 browser_agent.stop()
                 sys.exit(1)
             
-            # Get airport city from config (ask if not set)
-            airport_city = config.config_data.get('airport_city', '')
-            if not airport_city:
-                airport_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
-                if airport_city:
-                    config.config_data['airport_city'] = airport_city
-                    config.save_config()
-                    logger.info(f"✅ Saved airport city: {airport_city}")
-            
             # Pre-analyze receipts to find first city that's NOT your airport city
             trip_destination = "Business Travel"
             logger.info("Analyzing receipts for trip destination...")
@@ -304,7 +308,9 @@ def main():
                 data, _, _, _ = receipt_processor.analyze_receipt(receipt_path)
                 if data:
                     city = data.get('city', '').strip()
-                    if city and city.lower() != airport_city.lower():
+                    # Use city if it's different from user's airport city
+                    user_airport = config.config_data.get('airport_city', '')
+                    if city and city.lower() != user_airport.lower():
                         trip_destination = city
                         logger.info(f"✅ Found trip destination: {city}")
                         break
