@@ -287,16 +287,16 @@ def main():
                 browser_agent.stop()
                 sys.exit(1)
             
-            # Get home city from config
-            home_city = config.config_data.get('home_city', '')
-            if not home_city:
-                home_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
-                if home_city:
-                    config.config_data['home_city'] = home_city
+            # Get airport city from config (ask if not set)
+            airport_city = config.config_data.get('airport_city', '')
+            if not airport_city:
+                airport_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
+                if airport_city:
+                    config.config_data['airport_city'] = airport_city
                     config.save_config()
-                    logger.info(f"✅ Saved home city: {home_city}")
+                    logger.info(f"✅ Saved airport city: {airport_city}")
             
-            # Pre-analyze receipts to find first city that's NOT home city
+            # Pre-analyze receipts to find first city that's NOT your airport city
             trip_destination = "Business Travel"
             logger.info("Analyzing receipts for trip destination...")
             
@@ -304,7 +304,7 @@ def main():
                 data, _, _, _ = receipt_processor.analyze_receipt(receipt_path)
                 if data:
                     city = data.get('city', '').strip()
-                    if city and city.lower() != home_city.lower():
+                    if city and city.lower() != airport_city.lower():
                         trip_destination = city
                         logger.info(f"✅ Found trip destination: {city}")
                         break
