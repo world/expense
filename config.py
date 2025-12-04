@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
+from anthropic import Anthropic
 
 
 class Config:
@@ -16,7 +17,8 @@ class Config:
     def __init__(self, config_path: str = "config.json"):
         self.config_path = Path(config_path)
         self.config_data: Dict[str, Any] = {}
-        self.llm_client: Optional[OpenAI] = None
+        self.llm_client: Optional[Any] = None  # Can be OpenAI or Anthropic client
+        self.llm_provider: Optional[str] = None  # Track which provider
         
     def load(self) -> Tuple[bool, Optional[str]]:
         """
@@ -56,29 +58,43 @@ class Config:
             llm.get('base_url')
         )
     
-    def fetch_available_models(self, api_key: str, base_url: str) -> List[str]:
+    def fetch_available_models(self, api_key: str, base_url: str, provider: str) -> List[str]:
         """
         Fetch available models from the LLM API.
         
         Args:
             api_key: API key for authentication
             base_url: Base URL for the API
+            provider: Provider type ("openai", "anthropic", or "other")
             
         Returns:
             List of available model IDs
         """
         try:
-            # Create temporary client
-            temp_client = OpenAI(api_key=api_key, base_url=base_url)
-            
-            # Fetch models
-            models = temp_client.models.list()
-            
-            # Extract model IDs and sort
-            model_ids = [model.id for model in models.data]
-            model_ids.sort()
-            
-            return model_ids
+            if provider == "anthropic":
+                # Anthropic doesn't have a models.list() endpoint
+                # Return common Claude models
+                return [
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229",
+                    "claude-3-sonnet-20240229",
+                    "claude-3-haiku-20240307"
+                ]
+            elif provider == "openai":
+                # Use OpenAI client
+                temp_client = OpenAI(api_key=api_key, base_url=base_url)
+                models = temp_client.models.list()
+                model_ids = [model.id for model in models.data]
+                model_ids.sort()
+                return model_ids
+            else:
+                # Try OpenAI-compatible API
+                temp_client = OpenAI(api_key=api_key, base_url=base_url)
+                models = temp_client.models.list()
+                model_ids = [model.id for model in models.data]
+                model_ids.sort()
+                return model_ids
         except Exception as e:
             print(f"⚠️  Could not fetch models: {e}")
             return []
@@ -99,24 +115,28 @@ class Config:
         print("\nSelect your LLM provider:")
         print("  1. OpenAI (ChatGPT, GPT-4, etc.)")
         print("  2. Anthropic (Claude)")
-        print("  3. Other (custom API)")
+        print("  3. Other (custom OpenAI-compatible API)")
         
         provider_choice = input("\nChoose provider [1]: ").strip() or "1"
         
-        # Set base URL based on provider
+        # Set base URL and provider type based on choice
         if provider_choice == "1":
             base_url = "https://api.openai.com/v1"
             provider_name = "OpenAI"
+            provider_type = "openai"
         elif provider_choice == "2":
             base_url = "https://api.anthropic.com/v1"
             provider_name = "Anthropic"
+            provider_type = "anthropic"
         elif provider_choice == "3":
             base_url = input("Enter custom API base URL: ").strip()
             provider_name = "Custom"
+            provider_type = "other"
         else:
             # Default to OpenAI
             base_url = "https://api.openai.com/v1"
             provider_name = "OpenAI"
+            provider_type = "openai"
         
         print(f"✅ Selected: {provider_name}")
         print(f"   Base URL: {base_url}")
@@ -141,11 +161,21 @@ class Config:
             # Validate the API key
             print("🔐 Validating API key...")
             try:
-                # Create temporary client and make a simple test call
-                temp_client = OpenAI(api_key=api_key, base_url=base_url)
-                
-                # Try to list models as validation
-                temp_client.models.list()
+                # Create appropriate client and validate
+                if provider_type == "anthropic":
+                    # Use Anthropic client for validation
+                    temp_client = Anthropic(api_key=api_key)
+                    # Make a simple call to validate
+                    temp_client.messages.create(
+                        model="claude-3-haiku-20240307",
+                        max_tokens=10,
+                        messages=[{"role": "user", "content": "test"}]
+                    )
+                else:
+                    # Use OpenAI client for OpenAI and other providers
+                    temp_client = OpenAI(api_key=api_key, base_url=base_url)
+                    # Try to list models as validation
+                    temp_client.models.list()
                 
                 print("✅ API key is valid!")
                 key_valid = True
@@ -172,7 +202,7 @@ class Config:
         
         # Fetch available models
         print("\n🔍 Fetching available models...")
-        available_models = self.fetch_available_models(api_key, base_url)
+        available_models = self.fetch_available_models(api_key, base_url, provider_type)
         
         # Model selection
         model = llm.get('model', '')
@@ -213,11 +243,13 @@ class Config:
         result = {
             'api_key': api_key,
             'model': model,
-            'base_url': base_url
+            'base_url': base_url,
+            'provider': provider_type
         }
         
         # Update in-memory config
         self.config_data['llm'] = result
+        self.llm_provider = provider_type
         
         # Offer to save
         save = input("\n💾 Save these LLM settings to config.json? [Y/n]: ").strip().lower()
@@ -240,6 +272,7 @@ class Config:
             Tuple of (success, error_message)
         """
         llm = self.get_llm_config()
+        provider = llm.get('provider', 'openai')
         
         if logger:
             logger.info("Testing LLM connection...")
@@ -247,43 +280,63 @@ class Config:
             print("Testing LLM connection...")
         
         try:
-            # Create OpenAI client
-            self.llm_client = OpenAI(
-                api_key=llm['api_key'],
-                base_url=llm['base_url']
-            )
-            
-            # Simple test call
-            response = self.llm_client.chat.completions.create(
-                model=llm['model'],
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Respond only with valid JSON."},
-                    {"role": "user", "content": "Return this JSON: {\"test\": \"success\"}"}
-                ],
-                temperature=0,
-                max_tokens=50
-            )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Try to parse as JSON
-            try:
-                result = json.loads(content)
-                if result.get('test') == 'success':
-                    if logger:
-                        logger.info("✅ LLM connection successful!")
-                    else:
-                        print("✅ LLM connection successful!")
-                    return True, None
-            except json.JSONDecodeError:
-                pass
-            
-            # If we got here, response was not as expected but API worked
-            if logger:
-                logger.info("✅ LLM API responded (test result not as expected, but connection works)")
+            if provider == "anthropic":
+                # Create Anthropic client
+                self.llm_client = Anthropic(api_key=llm['api_key'])
+                self.llm_provider = "anthropic"
+                
+                # Simple test call
+                response = self.llm_client.messages.create(
+                    model=llm['model'],
+                    max_tokens=50,
+                    messages=[{"role": "user", "content": "Return this JSON: {\"test\": \"success\"}"}]
+                )
+                
+                # Anthropic returns content differently
+                if logger:
+                    logger.info("✅ LLM connection successful!")
+                else:
+                    print("✅ LLM connection successful!")
+                return True, None
             else:
-                print("✅ LLM API responded (test result not as expected, but connection works)")
-            return True, None
+                # Create OpenAI client (for OpenAI and other providers)
+                self.llm_client = OpenAI(
+                    api_key=llm['api_key'],
+                    base_url=llm['base_url']
+                )
+                self.llm_provider = provider
+                
+                # Simple test call
+                response = self.llm_client.chat.completions.create(
+                    model=llm['model'],
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant. Respond only with valid JSON."},
+                        {"role": "user", "content": "Return this JSON: {\"test\": \"success\"}"}
+                    ],
+                    temperature=0,
+                    max_tokens=50
+                )
+                
+                content = response.choices[0].message.content.strip()
+                
+                # Try to parse as JSON
+                try:
+                    result = json.loads(content)
+                    if result.get('test') == 'success':
+                        if logger:
+                            logger.info("✅ LLM connection successful!")
+                        else:
+                            print("✅ LLM connection successful!")
+                        return True, None
+                except json.JSONDecodeError:
+                    pass
+                
+                # If we got here, response was not as expected but API worked
+                if logger:
+                    logger.info("✅ LLM API responded (test result not as expected, but connection works)")
+                else:
+                    print("✅ LLM API responded (test result not as expected, but connection works)")
+                return True, None
             
         except Exception as e:
             error_msg = f"LLM connection failed: {str(e)}"
