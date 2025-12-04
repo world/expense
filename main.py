@@ -277,6 +277,18 @@ def main():
             config.config_data['airport_city'] = airport_city
             config.save_config()
             logger.info(f"✅ Saved airport city: {airport_city}")
+    
+    # Get user's full name from config (ask if not set) - needed for Meals attendee field
+    user_full_name = config.config_data.get('user_full_name', '')
+    if not user_full_name:
+        print("\n" + "=" * 60)
+        print("👤 USER NAME SETUP")
+        print("=" * 60)
+        user_full_name = input("What is your full name? (e.g., John Smith): ").strip()
+        if user_full_name:
+            config.config_data['user_full_name'] = user_full_name
+            config.save_config()
+            logger.info(f"✅ Saved user name: {user_full_name}")
         print("=" * 60 + "\n")
     
     # Initialize browser agent (skip in test mode)
@@ -331,7 +343,8 @@ def main():
         receipt_processor=receipt_processor,
         browser_agent=browser_agent,
         logger=logger,
-        test_mode=args.test
+        test_mode=args.test,
+        user_full_name=config.config_data.get('user_full_name', '')
     )
     
     # Process all receipts

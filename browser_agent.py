@@ -386,7 +386,8 @@ class OracleBrowserAgent:
         merchant: str,
         description: str,
         receipt_path: str = None,
-        is_first: bool = False
+        is_first: bool = False,
+        user_full_name: str = None
     ) -> bool:
         """
         Fill and save an expense item.
@@ -398,6 +399,7 @@ class OracleBrowserAgent:
             merchant: Merchant name
             description: Expense description
             is_first: Whether this is the first item (needs "Create Item" click)
+            user_full_name: User's name for Meals attendee field
             
         Returns:
             True if successful
@@ -516,6 +518,35 @@ class OracleBrowserAgent:
             
             if not type_filled and self.logger:
                 self.logger.warning("Could not fill Type field")
+            
+            # For Meals types, fill in Number of Attendees (1) and Attendee Names
+            if expense_type and expense_type.startswith("Meals") and user_full_name:
+                if self.logger:
+                    self.logger.info("🍽️  Meals type - filling attendee info...")
+                
+                # Fill Number of Attendees = 1
+                try:
+                    attendee_count_selector = "input[id*='NumberOfAttendees'], input[id*='attendee' i], input[name*='attendee' i]"
+                    attendee_loc = self.page.locator(attendee_count_selector).first
+                    if attendee_loc.is_visible(timeout=1000):
+                        attendee_loc.fill("1")
+                        if self.logger:
+                            self.logger.info("✅ Set attendees: 1")
+                except:
+                    if self.logger:
+                        self.logger.warning("Could not fill Number of Attendees")
+                
+                # Fill Attendee Names with user's name
+                try:
+                    names_selector = "input[id*='AttendeeNames'], input[id*='names' i], textarea[id*='attendee' i]"
+                    names_loc = self.page.locator(names_selector).first
+                    if names_loc.is_visible(timeout=1000):
+                        names_loc.fill(user_full_name)
+                        if self.logger:
+                            self.logger.info(f"✅ Set attendee name: {user_full_name}")
+                except:
+                    if self.logger:
+                        self.logger.warning("Could not fill Attendee Names")
             
             # After type is selected, attachments dropzone should appear
             if self.logger:

@@ -17,12 +17,14 @@ class ExpenseWorkflow:
         receipt_processor: ReceiptProcessor,
         browser_agent: OracleBrowserAgent,
         logger,
-        test_mode: bool = False
+        test_mode: bool = False,
+        user_full_name: str = None
     ):
         self.receipt_processor = receipt_processor
         self.browser_agent = browser_agent
         self.logger = logger
         self.test_mode = test_mode
+        self.user_full_name = user_full_name
         self.last_used_date: Optional[str] = None
         self.totals_by_currency: Dict[str, float] = {}
         self.receipts_processed = 0
@@ -175,7 +177,8 @@ class ExpenseWorkflow:
                 merchant=data.get('merchant', 'Unknown'),
                 description=data.get('description', 'Expense'),
                 receipt_path=str(image_path),
-                is_first=is_first
+                is_first=is_first,
+                user_full_name=self.user_full_name
             )
             
             if success:
