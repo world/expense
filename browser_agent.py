@@ -480,23 +480,48 @@ class OracleBrowserAgent:
             if self.logger:
                 self.logger.info(f"📋 Filling type: {expense_type}")
             type_filled = False
-            type_selectors = [
+            
+            # Try standard select first (quick check)
+            standard_selectors = [
                 "select[id*='type' i]",
-                "select[name*='type' i]",
-                "//label[contains(text(),'Type')]/following::select[1]"
+                "select[name*='type' i]"
             ]
-            for sel in type_selectors:
+            for sel in standard_selectors:
                 try:
-                    if sel.startswith("//"):
-                        loc = self.page.locator(f"xpath={sel}")
-                    else:
-                        loc = self.page.locator(sel)
-                    if loc.first.is_visible(timeout=2000):
-                        loc.first.select_option(label=expense_type)
+                    loc = self.page.locator(sel).first
+                    if loc.is_visible(timeout=500):  # Quick 500ms check
+                        loc.select_option(label=expense_type)
                         type_filled = True
                         break
                 except:
                     continue
+            
+            # Oracle often uses custom dropdown - try clicking and selecting from list
+            if not type_filled:
+                oracle_dropdown_selectors = [
+                    "[id*='Type' i][class*='select']",
+                    "[id*='type' i][role='combobox']",
+                    "//label[contains(text(),'Type')]/following::*[contains(@class,'select')][1]",
+                    "//label[contains(text(),'Type')]/following::input[1]"
+                ]
+                for sel in oracle_dropdown_selectors:
+                    try:
+                        if sel.startswith("//"):
+                            loc = self.page.locator(f"xpath={sel}").first
+                        else:
+                            loc = self.page.locator(sel).first
+                        if loc.is_visible(timeout=500):  # Quick check
+                            loc.click()
+                            time.sleep(0.3)  # Brief wait for dropdown to open
+                            # Try to click the option from the dropdown list
+                            option = self.page.locator(f"text={expense_type}").first
+                            if option.is_visible(timeout=1000):
+                                option.click()
+                                type_filled = True
+                                break
+                    except:
+                        continue
+            
             if not type_filled and self.logger:
                 self.logger.warning("Could not fill Type field")
             
@@ -507,27 +532,21 @@ class OracleBrowserAgent:
                 "text=Attachments",
                 "button:has-text('Add Attachment')",
                 "button:has-text('Attach')",
-                "input[type='file']",
-                "[class*='attachment']",
-                "[id*='attachment']"
+                "input[type='file']"
             ]
             attachment_appeared = False
-            for sel in attachment_selectors:
-                try:
-                    loc = self.page.locator(sel).first
-                    loc.wait_for(state="visible", timeout=5000)
-                    attachment_appeared = True
-                    if self.logger:
-                        self.logger.info("✅ Attachments section appeared")
-                    break
-                except:
-                    continue
-            
-            if not attachment_appeared:
-                # Fallback to a brief wait if we couldn't detect the section
+            # Try all selectors with a single shared timeout (race them)
+            try:
+                combined_selector = ", ".join(attachment_selectors)
+                self.page.locator(combined_selector).first.wait_for(state="visible", timeout=3000)
+                attachment_appeared = True
                 if self.logger:
-                    self.logger.info("⏳ Attachments section not detected, waiting 1s...")
-                time.sleep(1)
+                    self.logger.info("✅ Attachments section appeared")
+            except:
+                # Fallback to a brief wait
+                if self.logger:
+                    self.logger.info("⏳ Attachments not detected, brief wait...")
+                time.sleep(0.5)
             
             # Fill Amount field
             if self.logger:
