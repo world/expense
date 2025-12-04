@@ -55,16 +55,28 @@ def select_receipts_folder() -> Path:
         folder_path = default_path
     elif choice.lower() == 'f' and HAS_TKINTER:
         # Open Finder dialog
-        print("\n🖱️  Opening Finder... (the window may appear behind other windows)")
+        print("\n🖱️  Opening Finder dialog...")
+        
+        # Create root window with better focus handling for macOS
         root = Tk()
         root.withdraw()  # Hide the root window
-        root.attributes('-topmost', True)  # Bring dialog to front
+        
+        # Force window to front on macOS
+        root.lift()
+        root.attributes('-topmost', True)
+        root.focus_force()
+        
+        # Brief pause to let window system catch up
+        root.update()
         
         folder_path = filedialog.askdirectory(
             initialdir=str(default_path),
-            title="Select Receipts Folder"
+            title="Select Receipts Folder",
+            parent=root
         )
         
+        # Clean up
+        root.attributes('-topmost', False)
         root.destroy()
         
         if not folder_path:
