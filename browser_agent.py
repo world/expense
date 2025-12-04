@@ -575,12 +575,21 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.info("📎 Uploading receipt attachment...")
                 try:
-                    # Click the dropzone/Add File link to open file picker
-                    add_file_link = self.page.locator("a[title='Add File'], div.FndDropzone").first
-                    add_file_link.click()
+                    # Step 1: Click the dropzone to open the menu
+                    dropzone_link = self.page.locator("a[title='Add File'], text=Drag files here or click to add attachment, div.FndDropzone").first
+                    dropzone_link.click()
                     self.page.wait_for_timeout(500)
                     
-                    # Look for file input that should appear
+                    # Step 2: Click "Add File" from the dropdown menu
+                    if self.logger:
+                        self.logger.info("  Clicking 'Add File' from menu...")
+                    add_file_menu = self.page.locator("text=Add File, td:has-text('Add File'), [role='menuitem']:has-text('Add File')").first
+                    add_file_menu.click()
+                    self.page.wait_for_timeout(500)
+                    
+                    # Step 3: Now file input should be available - set the file
+                    if self.logger:
+                        self.logger.info("  Setting file...")
                     file_input = self.page.locator("input[type='file']").first
                     file_input.set_input_files(receipt_path)
                     
