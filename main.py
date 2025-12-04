@@ -246,6 +246,30 @@ def main():
         logger.error("Cannot proceed without working LLM connection")
         sys.exit(1)
     
+    # Get user's full name from config (ask if not set) - needed for Meals attendee field
+    user_full_name = config.config_data.get('user_full_name', '')
+    if not user_full_name:
+        print("\n" + "=" * 60)
+        print("👤 USER NAME SETUP")
+        print("=" * 60)
+        user_full_name = input("What is your full name? (e.g., John Smith): ").strip()
+        if user_full_name:
+            config.config_data['user_full_name'] = user_full_name
+            config.save_config()
+            logger.info(f"✅ Saved user name: {user_full_name}")
+    
+    # Get airport city from config (ask if not set) - needed for Purpose field
+    airport_city = config.config_data.get('airport_city', '')
+    if not airport_city:
+        print("\n" + "=" * 60)
+        print("🏠 AIRPORT CITY SETUP")
+        print("=" * 60)
+        airport_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
+        if airport_city:
+            config.config_data['airport_city'] = airport_city
+            config.save_config()
+            logger.info(f"✅ Saved airport city: {airport_city}")
+    
     # Select receipts folder
     receipts_folder = select_receipts_folder()
     
@@ -265,31 +289,6 @@ def main():
         provider=config.llm_provider or "openai",
         logger=logger
     )
-    
-    # Get airport city from config (ask if not set) - needed for Purpose field
-    airport_city = config.config_data.get('airport_city', '')
-    if not airport_city:
-        print("\n" + "=" * 60)
-        print("🏠 AIRPORT CITY SETUP")
-        print("=" * 60)
-        airport_city = input("What airport city do you call home? (e.g., Austin, Boston): ").strip()
-        if airport_city:
-            config.config_data['airport_city'] = airport_city
-            config.save_config()
-            logger.info(f"✅ Saved airport city: {airport_city}")
-    
-    # Get user's full name from config (ask if not set) - needed for Meals attendee field
-    user_full_name = config.config_data.get('user_full_name', '')
-    if not user_full_name:
-        print("\n" + "=" * 60)
-        print("👤 USER NAME SETUP")
-        print("=" * 60)
-        user_full_name = input("What is your full name? (e.g., John Smith): ").strip()
-        if user_full_name:
-            config.config_data['user_full_name'] = user_full_name
-            config.save_config()
-            logger.info(f"✅ Saved user name: {user_full_name}")
-        print("=" * 60 + "\n")
     
     # Initialize browser agent (skip in test mode)
     browser_agent = None
