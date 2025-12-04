@@ -475,6 +475,7 @@ class OracleBrowserAgent:
                     self.logger.warning(f"Could not fill Date field: {e}")
             
             # Fill Type dropdown - it's a <select> with ExpenseTypeId in the id
+            # Oracle quirk: need to click dropdown TWICE after date for values to appear
             if self.logger:
                 self.logger.info(f"📋 Filling type: {expense_type}")
             type_filled = False
@@ -483,24 +484,23 @@ class OracleBrowserAgent:
             
             try:
                 type_loc = self.page.locator(type_selector).first
-                if self.logger:
-                    self.logger.info("  Looking for type dropdown...")
                 type_loc.wait_for(state="visible", timeout=2000)
                 
+                # Oracle quirk: click dropdown twice to load options
                 if self.logger:
-                    self.logger.info("  Found dropdown, checking options...")
+                    self.logger.info("  Clicking dropdown (1st click)...")
+                type_loc.click()
+                self.page.wait_for_timeout(300)
                 
-                # Quick check for options
+                if self.logger:
+                    self.logger.info("  Clicking dropdown (2nd click)...")
+                type_loc.click()
+                self.page.wait_for_timeout(300)
+                
+                # Check options loaded
                 options_count = type_loc.locator("option").count()
                 if self.logger:
                     self.logger.info(f"  Found {options_count} options")
-                
-                if options_count <= 1:
-                    # Wait a bit more for options to load
-                    self.page.wait_for_timeout(500)
-                    options_count = type_loc.locator("option").count()
-                    if self.logger:
-                        self.logger.info(f"  After wait: {options_count} options")
                 
                 if self.logger:
                     self.logger.info(f"  Selecting '{expense_type}'...")
