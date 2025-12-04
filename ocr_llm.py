@@ -126,22 +126,23 @@ Your task:
 5. Extract the transaction date in DD-MM-YYYY format (e.g., 15-01-2025 for January 15, 2025)
 6. Generate a concise description (max 50 chars)
 
-CRITICAL INSTRUCTIONS - YOU MUST FOLLOW EXACTLY:
-1. Return ONLY a single JSON object - no markdown, no explanations
-2. Include ALL 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description
-3. Date: Extract from receipt in DD-MM-YYYY format (e.g., "15-01-2025"). If no date visible, use today's date: {datetime.now().strftime('%d-%m-%Y')}
-4. Description: Concise 2-5 word description based on merchant (e.g., "Coffee and snack", "Rideshare to airport", "Hotel stay")
-5. type_key must match one of: {', '.join([et['type_key'] for et in self.expense_types])}
+Return a single JSON object with these 7 required fields: type_key, type_label, merchant, total_amount, currency, date, description
 
-Example format (you must follow this exact structure):
-{{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":15.75,"currency":"USD","date":"15-01-2025","description":"Coffee and snack"}}
+Valid type_key values (match EXACTLY):
+{chr(10).join([f'- {et["type_key"]}: "{et["type_label"]}"' for et in self.expense_types])}
 
-ALL 7 fields are REQUIRED and MUST have values (no null, no empty strings)."""
+Rules:
+- Date format: DD-MM-YYYY (e.g., "15-01-2025"). If no date on receipt, use: {datetime.now().strftime('%d-%m-%Y')}
+- Description: 2-5 words describing the expense (e.g., "Coffee and snack")
+- Match type_key to merchant's business (Starbucks=MEALS_BREAKFAST, Uber=TRAVEL_GROUND_TRANSPORT, etc.)
+- Return ONLY valid JSON, no markdown, no explanations
 
-        user_prompt = f"""Receipt text:
+Example: {{"type_key":"MEALS_BREAKFAST","type_label":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":15.75,"currency":"USD","date":"04-12-2025","description":"Coffee and snack"}}"""
+
+        user_prompt = f"""Receipt OCR text:
 {ocr_text}
 
-Return ONLY the JSON with all 7 fields. Remember: date must be DD-MM-YYYY (use {datetime.now().strftime('%d-%m-%Y')} if unclear), description must be concise (2-5 words)."""
+Return JSON with all 7 fields. Use today's date ({datetime.now().strftime('%d-%m-%Y')}) if no date visible."""
 
         return [
             {"role": "system", "content": system_prompt},
@@ -191,16 +192,22 @@ Return ONLY the JSON with all 7 fields. Remember: date must be DD-MM-YYYY (use {
                 warnings.append(f"Invalid amount: {data.get('total_amount')}")
                 data['total_amount'] = 0.0
             
-            # Validate type against known types
+            # Validate type against known types - don't fail, just fix it
             valid_keys = [et['type_key'] for et in self.expense_types]
             if data['type_key'] not in valid_keys:
-                warnings.append(f"Unknown type_key '{data['type_key']}', falling back to OTHER")
-                data['type_key'] = 'OTHER'
-                data['type_label'] = 'Other'
+                # Find MISC_OTHER as fallback
+                misc_type = next((et for et in self.expense_types if 'OTHER' in et['type_key'].upper()), None)
+                if misc_type:
+                    data['type_key'] = misc_type['type_key']
+                    data['type_label'] = misc_type['type_label']
+                else:
+                    # Absolute fallback
+                    data['type_key'] = self.expense_types[0]['type_key']
+                    data['type_label'] = self.expense_types[0]['type_label']
+                # This is a warning but not a failure - don't add to warnings list that triggers retry
             
-            # Validate description is concise
+            # Validate description is concise - auto-fix without warning
             if data['description'] and len(data['description']) > 100:
-                warnings.append(f"Description too long ({len(data['description'])} chars), truncating to 50 chars")
                 data['description'] = data['description'][:50].strip()
             
             # Parse and normalize date

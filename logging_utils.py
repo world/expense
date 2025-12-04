@@ -158,14 +158,14 @@ class ExpenseLogger:
         total_processed = len(self.receipt_logs)
         
         # Console summary with detailed table
-        self.info("\n" + "=" * 120)
-        self.info("📊 EXPENSE REPORT SUMMARY")
-        self.info("=" * 120)
+        print("\n" + "🤑" * 60)
+        print("                              💰 EXPENSE REPORT SUMMARY 💰")
+        print("🤑" * 60)
         
         if self.receipt_logs:
             # Print header
-            self.info(f"{'#':<4} {'FILE':<25} {'DATE':<12} {'TYPE':<30} {'MERCHANT':<20} {'AMOUNT':>12}")
-            self.info("-" * 120)
+            print(f"{'#':<4} {'FILE':<25} {'DATE':<12} {'TYPE':<30} {'MERCHANT':<20} {'AMOUNT':>12}")
+            print("-" * 120)
             
             # Print each receipt
             for receipt in self.receipt_logs:
@@ -177,21 +177,21 @@ class ExpenseLogger:
                 amount = receipt['total_amount']
                 currency = receipt['currency']
                 
-                self.info(f"{idx:<4} {filename:<25} {date:<12} {type_label:<30} {merchant:<20} {amount:>10.2f} {currency}")
+                print(f"{idx:<4} {filename:<25} {date:<12} {type_label:<30} {merchant:<20} {amount:>10.2f} {currency}")
             
-            self.info("-" * 120)
+            print("-" * 120)
         
         # Totals section
-        self.info(f"\n{'PROCESSED:':<20} {total_processed} receipts")
+        print(f"\n{'PROCESSED:':<20} {total_processed} receipts")
         
         if skipped > 0:
-            self.warning(f"{'SKIPPED:':<20} {skipped} receipts due to errors")
+            print(f"{'SKIPPED:':<20} {skipped} receipts due to errors")
         
-        self.info(f"\n{'TOTAL BY CURRENCY:':}")
+        print(f"\n{'TOTAL BY CURRENCY:':}")
         for currency, total in sorted(totals_by_currency.items()):
-            self.info(f"  {currency:>5}: {total:>12.2f}")
+            print(f"  {currency:>5}: {total:>12.2f}")
         
-        self.info("=" * 120 + "\n")
+        print("\n" + "🤑" * 60 + "\n")
         
         # Structured summary to log file
         summary_data = {
