@@ -600,21 +600,29 @@ class OracleBrowserAgent:
         if self.logger:
             self.logger.info("➕ Clicking 'Create Another'...")
         
-        create_another_selector = "text=Create Another, button:has-text('Create Another'), a:has-text('Create Another')"
+        # Oracle uses span.xrk for buttons
+        create_another_selectors = [
+            "span.xrk:has-text('Create Another')",
+            "text=Create Another",
+            "button:has-text('Create Another')",
+            "a:has-text('Create Another')"
+        ]
         
-        try:
-            loc = self.page.locator(create_another_selector).first
-            loc.wait_for(state="visible", timeout=3000)
-            loc.click()
-            if self.logger:
-                self.logger.info("✅ Clicked Create Another")
-            # Smart wait for form to be ready
-            self.page.wait_for_load_state("domcontentloaded")
-            return True
-        except Exception as e:
-            if self.logger:
-                self.logger.warning(f"Could not find 'Create Another' button: {e}")
-            return False
+        for selector in create_another_selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    if self.logger:
+                        self.logger.info("✅ Clicked Create Another")
+                    self.page.wait_for_load_state("domcontentloaded")
+                    return True
+            except:
+                continue
+        
+        if self.logger:
+            self.logger.warning("Could not find 'Create Another' button")
+        return False
     
     def click_save_and_close(self) -> bool:
         """
@@ -626,20 +634,28 @@ class OracleBrowserAgent:
         if self.logger:
             self.logger.info("💾 Clicking 'Save and Close'...")
         
-        save_selector = "text=Save and Close, button:has-text('Save and Close'), button:has-text('Save & Close'), a:has-text('Save and Close')"
+        # Oracle uses span.xrk for buttons
+        save_selectors = [
+            "span.xrk:has-text('Save and Close')",
+            "text=Save and Close",
+            "button:has-text('Save and Close')",
+            "a:has-text('Save and Close')"
+        ]
         
-        try:
-            loc = self.page.locator(save_selector).first
-            loc.wait_for(state="visible", timeout=3000)
-            loc.click()
-            if self.logger:
-                self.logger.info("✅ Clicked Save and Close")
-            # Smart wait for save to complete
-            self.page.wait_for_load_state("domcontentloaded")
-            return True
-        except Exception as e:
-            if self.logger:
-                self.logger.warning(f"Could not find 'Save and Close' button: {e}")
-            return False
+        for selector in save_selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    if self.logger:
+                        self.logger.info("✅ Clicked Save and Close")
+                    self.page.wait_for_load_state("domcontentloaded")
+                    return True
+            except:
+                continue
+        
+        if self.logger:
+            self.logger.warning("Could not find 'Save and Close' button")
+        return False
     
 
