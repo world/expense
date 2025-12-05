@@ -1,34 +1,35 @@
 ## AI‑Powered Oracle Expense Reports 💰
 
-AI‑powered helper that turns batches of receipt images into **pre‑filled Oracle expense reports** using LLM **vision models** (Claude / OpenAI) with a local Tesseract OCR fallback, plus Playwright automation to click through Oracle for you.
+AI‑powered helper that turns batches of receipt images into **pre‑filled Oracle expense reports** using LLM **vision models** (Claude / OpenAI) with a local Tesseract OCR fallback, plus Playwright automation to click through Oracle for you. It also learns your **home city** and infers the **trip destination city** directly from the receipts.
 
 ---
 
-## Features
+## Features (high‑level)
 
 - **Vision + OCR pipeline**
-  - For **OpenAI / Anthropic** providers, receipts are sent directly as images to the provider’s **vision model**.
-  - For **custom/other providers**, receipts go through **local Tesseract OCR**, then a text‑only LLM.
-- **AI expense classification**
-  - Infers expense type, merchant, amount, date, description, and (optionally) city.
-  - Tuned for Oracle categories such as `Meals-Breakfast and Tip`, `Meals-Lunch and Tip`, `Meals-Dinner and Tip`, `Travel-Hotel Accommodation`, etc.
-  - For meals, uses the **time-of-day on the receipt** (when available) to distinguish breakfast vs lunch vs dinner.
-- **Browser automation (Playwright)**
-  - Launches a persistent Chromium profile and remembers your Oracle SSO session between runs.
-  - Creates a new expense report with a smart “Trip to <city>” purpose, where `<city>` is inferred by comparing the **per‑receipt `city` from the LLM** with your configured **home `airport_city`**.
-  - Then creates expense items and uploads attachments for each receipt.
-  - Uses robust keyboard‑driven automation (Tab/Space/Enter) to reliably click Oracle’s `Create Item`, `Create Another`, and `Save and Close` buttons.
+  - OpenAI/Anthropic: send receipt **images** to the provider’s vision model.
+  - Custom/other: run local **Tesseract OCR**, then send OCR text to a text‑only LLM.
+- **AI expense & city inference**
+  - LLM returns strict JSON with: `expense_type`, `merchant`, `total_amount`, `currency`, `date`, `description`, and `city`.
+  - Expense type is validated against the Oracle type list in `config.json` (with fallback to a Misc/Other type).
+  - For meals, uses **time-of-day** on the receipt (when visible) to pick `Meals-Breakfast and Tip` vs `Meals-Lunch and Tip` vs `Meals-Dinner and Tip`.
+  - For trip destination, compares each receipt’s inferred `city` to your configured home `airport_city` and picks the **first different city** as the destination (used in the report Purpose, e.g. `Trip to Chicago`).
+- **Oracle automation (Playwright)**
+  - Uses a persistent Chromium profile so your Oracle SSO session is remembered.
+  - Creates a new report, then for each receipt:
+    - Clicks `Create Item` / `Create Another`, fills date, type, merchant, description, amount, and attendees (for Meals).
+    - Uploads the receipt file via `<input type="file">`.
+  - Uses robust keyboard‑driven Tab/Space/Enter sequences to reliably trigger Oracle’s `Create Item`, `Create Another`, and `Save and Close` buttons.
 - **Smart date resolution**
   - 1) Use date from OCR/LLM (if valid).
   - 2) Else reuse the last successful date.
   - 3) Else prompt you **once** on the first receipt.
-- **Comprehensive logging**
-  - Detailed per‑receipt JSON lines in `expense_helper.log` plus a human‑readable summary table and totals by currency.
-- **Test mode**
-  - Run the entire OCR/LLM and logging pipeline **without touching Oracle**.
+- **Test mode and logging**
+  - `make test` runs the entire OCR/LLM + logging pipeline **without touching Oracle**.
+  - Every run appends detailed JSON lines and a human summary table to `expense_helper.log`.
 - **macOS‑friendly UX**
   - Finder dialog for selecting the receipts folder.
-  - Remembers your last-used receipts folder in `~/.expense_helper_cache`.
+  - Remembers your last‑used receipts folder in `~/.expense_helper_cache`.
 
 ---
 
