@@ -67,9 +67,12 @@ INSTRUCTIONS:
    - Even if breakfast is included, if it's a hotel folio/bill → "Travel-Hotel Accommodation"
    
    MEALS (only for standalone restaurants/cafes):
-   - Coffee shops (Starbucks, Dunkin, etc.) → "Meals-Breakfast and Tip"
-   - Lunch places (Chipotle, Subway, etc.) → "Meals-Lunch and Tip"  
-   - Dinner restaurants → "Meals-Dinner and Tip"
+   - CHECK THE TIME on the receipt if visible!
+   - < 11:00 AM → "Meals-Breakfast and Tip"
+   - 11:00 AM - 4:00 PM → "Meals-Lunch and Tip"
+   - > 4:00 PM → "Meals-Dinner and Tip"
+   - If time not visible, guess based on merchant (e.g. "Breakfast Club" → Breakfast)
+   - Coffee shops (Starbucks, Dunkin, etc.) → usually "Meals-Breakfast and Tip" unless PM timestamp
    
    TRANSPORTATION:
    - Uber/Lyft/rideshare → "Travel-Non-Car Rental Ground Transport"

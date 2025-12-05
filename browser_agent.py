@@ -650,6 +650,36 @@ class OracleBrowserAgent:
                 if self.logger:
                     self.logger.warning(f"Could not fill Amount field: {e}")
             
+            # Fill Merchant name
+            if merchant:
+                if self.logger:
+                    self.logger.info(f"🏪 Filling merchant: {merchant}")
+                merchant_selector = "input[id*='Merchant'], input[id*='merchant' i], input[name*='merchant' i], input[aria-label*='Merchant']"
+                try:
+                    merchant_loc = self.page.locator(merchant_selector).first
+                    merchant_loc.wait_for(state="visible", timeout=2000)
+                    merchant_loc.fill(merchant)
+                    if self.logger:
+                        self.logger.info(f"✅ Filled merchant: {merchant}")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"Could not fill Merchant field: {e}")
+            
+            # Fill Description
+            if description:
+                if self.logger:
+                    self.logger.info(f"📝 Filling description: {description}")
+                desc_selector = "input[id*='Description'], input[id*='description' i], textarea[id*='Description'], input[aria-label*='Description'], input[id*='Justification'], textarea[id*='Justification']"
+                try:
+                    desc_loc = self.page.locator(desc_selector).first
+                    desc_loc.wait_for(state="visible", timeout=2000)
+                    desc_loc.fill(description)
+                    if self.logger:
+                        self.logger.info(f"✅ Filled description: {description}")
+                except Exception as e:
+                    if self.logger:
+                        self.logger.warning(f"Could not fill Description field: {e}")
+            
             if self.logger:
                 self.logger.info("✅ Expense item fields filled")
             
@@ -670,56 +700,104 @@ class OracleBrowserAgent:
         if self.logger:
             self.logger.info("➕ Clicking 'Create Another'...")
         
-        # Oracle uses span.xrk for buttons
-        create_another_selectors = [
-            "span.xrk:has-text('Create Another')",
-            "text=Create Another",
-            "button:has-text('Create Another')",
-            "a:has-text('Create Another')"
-        ]
+        clicked = False
         
-        for selector in create_another_selectors:
-            try:
-                loc = self.page.locator(selector).first
-                if loc.is_visible(timeout=1000):
-                    loc.click()
+        # Strategy: Trace tab path from label to find the button
+        try:
+            # Focus the label
+            label = self.page.locator("text=Create Expense Item").first
+            if label.is_visible():
+                if self.logger:
+                    self.logger.info("  Focusing 'Create Expense Item' label...")
+                label.click() # Click to ensure focus context is really there
+                
+                # Tab and log focus 15 times
+                for i in range(15):
+                    self.page.keyboard.press("Tab")
+                    self.page.wait_for_timeout(200)
+                    
+                    # Get focused element details
+                    focused_text = self.page.evaluate("document.activeElement.innerText")
+                    focused_tag = self.page.evaluate("document.activeElement.tagName")
+                    
                     if self.logger:
-                        self.logger.info("✅ Clicked Create Another - waiting for submit...")
+                        short_text = (focused_text[:40] + '..') if focused_text and len(focused_text) > 40 else focused_text
+                        self.logger.info(f"  Tab #{i+1}: <{focused_tag}> '{short_text}'")
                     
-                    # Smart wait: verify current item was submitted by waiting for:
-                    # 1. The uploaded attachment to disappear (new form won't have it)
-                    # 2. Or the Date field to be empty/reset
-                    try:
-                        # Wait for attachment indicator to disappear (proves save completed)
-                        attachment_indicator = "img[title='File'], a[title='Download']"
-                        self.page.locator(attachment_indicator).first.wait_for(state="hidden", timeout=10000)
+                    # Check if we found it
+                    if focused_text and "Create Another" in focused_text:
                         if self.logger:
-                            self.logger.info("✅ Previous item saved, new form ready")
-                    except:
-                        # Fallback: wait for Date field to be empty (form reset)
+                            self.logger.info("  🎯 FOUND IT! Pressing Space...")
+                        
+                        # Optimize: 500ms settle time is usually enough
+                        self.page.wait_for_timeout(500)
+                        
+                        # Try Space (Primary method) - Hold for 200ms
+                        self.page.keyboard.down("Space")
+                        self.page.wait_for_timeout(200)
+                        self.page.keyboard.up("Space")
+                        
+                        # Quick check for success after 1s
+                        self.page.wait_for_timeout(1000)
+                        
                         try:
-                            date_field = self.page.locator("input[id*='StartDate']").first
-                            # Wait for the date field value to be empty
-                            for _ in range(20):  # Max 10 seconds
-                                value = date_field.input_value()
-                                if not value or value.strip() == "":
-                                    break
-                                self.page.wait_for_timeout(500)
-                            if self.logger:
-                                self.logger.info("✅ Form reset detected, new form ready")
+                            date_val = self.page.locator("input[id*='StartDate']").first.input_value()
+                            if not date_val:
+                                if self.logger:
+                                    self.logger.info("  ✅ Success! Form reset detected immediately.")
+                                clicked = True
+                                break
                         except:
-                            # Last resort: just wait for network idle
-                            self.page.wait_for_load_state("networkidle", timeout=10000)
-                            if self.logger:
-                                self.logger.info("✅ Network idle, assuming form ready")
-                    
-                    return True
-            except:
-                continue
+                            pass
+                            
+                        # If Space failed, try Enter immediately
+                        if self.logger:
+                            self.logger.info("  ⚠️ Space didn't trigger yet, trying Enter...")
+                        self.page.keyboard.press("Enter")
+                        
+                        clicked = True
+                        break
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"  Tab trace failed: {e}")
+        
+        if not clicked:
+            if self.logger:
+                self.logger.warning("Could not find/click 'Create Another' button")
+            return False
         
         if self.logger:
-            self.logger.warning("Could not find 'Create Another' button")
-        return False
+            self.logger.info("⏳ Waiting for form to submit and reset...")
+        
+        # Wait for the form to actually submit and reset
+        # The key indicator is that the Date field should become empty
+        try:
+            date_field = self.page.locator("input[id*='StartDate']").first
+            original_date = date_field.input_value()
+            
+            if self.logger:
+                self.logger.info(f"  Current date value: '{original_date}'")
+            
+            # Wait for date field to clear (max 15 seconds)
+            for i in range(30):
+                self.page.wait_for_timeout(500)
+                current_value = date_field.input_value()
+                if current_value != original_date or not current_value or current_value.strip() == "":
+                    if self.logger:
+                        self.logger.info(f"  ✅ Form reset detected (date changed from '{original_date}' to '{current_value}')")
+                    return True
+            
+            # If we got here, form didn't reset
+            if self.logger:
+                self.logger.warning(f"  ⚠️ Form may not have reset - date still '{date_field.input_value()}'")
+            
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"  Could not verify form reset: {e}")
+            # Fallback: just wait for network idle
+            self.page.wait_for_load_state("networkidle", timeout=10000)
+        
+        return True
     
     def click_save_and_close(self) -> bool:
         """
@@ -731,28 +809,111 @@ class OracleBrowserAgent:
         if self.logger:
             self.logger.info("💾 Clicking 'Save and Close'...")
         
-        # Oracle uses span.xrk for buttons
-        save_selectors = [
-            "span.xrk:has-text('Save and Close')",
-            "text=Save and Close",
-            "button:has-text('Save and Close')",
-            "a:has-text('Save and Close')"
-        ]
+        clicked = False
         
-        for selector in save_selectors:
-            try:
-                loc = self.page.locator(selector).first
-                if loc.is_visible(timeout=500):
-                    loc.click()
+        # Strategy: Same as Create Another - Tab from label
+        try:
+            # Focus the label
+            label = self.page.locator("text=Create Expense Item").first
+            if label.is_visible():
+                if self.logger:
+                    self.logger.info("  Focusing 'Create Expense Item' label...")
+                label.click() # Click to ensure focus context is really there
+                
+                # Tab and log focus
+                for i in range(15):
+                    self.page.keyboard.press("Tab")
+                    self.page.wait_for_timeout(200)
+                    
+                    # Get focused element details
+                    focused_text = self.page.evaluate("document.activeElement.innerText")
+                    focused_tag = self.page.evaluate("document.activeElement.tagName")
+                    
                     if self.logger:
-                        self.logger.info("✅ Clicked Save and Close")
-                    self.page.wait_for_load_state("domcontentloaded")
-                    return True
-            except:
-                continue
+                        short_text = (focused_text[:40] + '..') if focused_text and len(focused_text) > 40 else focused_text
+                        self.logger.info(f"  Tab #{i+1}: <{focused_tag}> '{short_text}'")
+                    
+                    # Check if we found it - "Save" AND "Close"
+                    if focused_text and "Save" in focused_text and "Close" in focused_text:
+                        if self.logger:
+                            self.logger.info("  🎯 FOUND IT! Waiting then pressing Space...")
+                        
+                        # Wait for UI to settle
+                        self.page.wait_for_timeout(500)
+                        
+                        # Space (hold)
+                        self.page.keyboard.down("Space")
+                        self.page.wait_for_timeout(200)
+                        self.page.keyboard.up("Space")
+                        
+                        # Wait and check, then backup Enter
+                        self.page.wait_for_timeout(1000)
+                        self.page.keyboard.press("Enter")
+                        
+                        clicked = True
+                        if self.logger:
+                            self.logger.info("  ✅ Executed Space + Enter on 'Save and Close'")
+                        break
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"  Tab trace failed: {e}")
         
-        if self.logger:
-            self.logger.warning("Could not find 'Save and Close' button")
-        return False
+        if not clicked:
+            if self.logger:
+                self.logger.warning("Could not find 'Save and Close' button")
+            return False
+        
+        self.page.wait_for_load_state("domcontentloaded")
+        return True
     
+    def click_save(self) -> bool:
+        """
+        Click 'Save' button (just save, not close).
+        
+        Returns:
+            True if button found and clicked
+        """
+        if self.logger:
+            self.logger.info("💾 Clicking 'Save'...")
+        
+        clicked = False
+        
+        # Strategy: Find Save button on report page (could be anywhere)
+        try:
+            # Try to find the Save button directly
+            save_btn = self.page.locator("a.xrg:has(span.xrk:text-is('Save'))").first
+            if save_btn.is_visible(timeout=3000):
+                if self.logger:
+                    self.logger.info("  Found 'Save' button, focusing...")
+                
+                # Focus it
+                save_btn.focus()
+                self.page.wait_for_timeout(500)
+                
+                # Space (hold)
+                self.page.keyboard.down("Space")
+                self.page.wait_for_timeout(200)
+                self.page.keyboard.up("Space")
+                
+                # Wait and backup Enter
+                self.page.wait_for_timeout(1000)
+                self.page.keyboard.press("Enter")
+                
+                clicked = True
+                if self.logger:
+                    self.logger.info("  ✅ Executed Space + Enter on 'Save'")
+            else:
+                if self.logger:
+                    self.logger.warning("  Could not find 'Save' button on page")
+        except Exception as e:
+            if self.logger:
+                self.logger.warning(f"  Save button interaction failed: {e}")
+        
+        if not clicked:
+            if self.logger:
+                self.logger.warning("Could not find 'Save' button")
+            return False
+        
+        self.page.wait_for_load_state("domcontentloaded")
+        return True
 
