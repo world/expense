@@ -21,10 +21,11 @@ from logging_utils import ExpenseLogger
 from ocr_llm import ReceiptProcessor
 from browser_agent import OracleBrowserAgent
 from expense_workflow import ExpenseWorkflow
+from debug_utils import set_debug_dump_html
 
 
-# Supported image formats
-SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.heic'}
+# Supported image and document formats
+SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.heic', '.pdf'}
 
 
 def get_last_used_folder() -> Optional[Path]:
@@ -141,18 +142,72 @@ def select_receipts_folder() -> Path:
     return folder_path
 
 
+def pdf_to_images(pdf_path: Path, logger: ExpenseLogger) -> List[Path]:
+    """
+    Convert PDF pages to image files in the same folder as the PDF.
+    
+    Args:
+        pdf_path: Path to PDF file
+        logger: Logger instance
+        
+    Returns:
+        List of paths to image files (one per page)
+    """
+    import fitz  # PyMuPDF
+    
+    images = []
+    
+    try:
+        doc = fitz.open(pdf_path)
+        logger.info(f"Converting {len(doc)} page(s) from PDF: {pdf_path.name}")
+        
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            
+            # Render page to image at 300 DPI for good quality
+            pix = page.get_pixmap(dpi=300)
+            
+            # Save in same folder as PDF with descriptive name
+            if len(doc) == 1:
+                # Single page: just replace .pdf with .png
+                image_path = pdf_path.with_suffix('.png')
+            else:
+                # Multiple pages: add page number
+                image_path = pdf_path.parent / f"{pdf_path.stem}_page{page_num+1}.png"
+            
+            # Save as PNG
+            pix.save(str(image_path))
+            images.append(image_path)
+            
+            logger.debug(f"  Converted page {page_num + 1}/{len(doc)} to {image_path.name}")
+        
+        doc.close()
+        logger.info(f"✅ Converted PDF to {len(images)} image(s)")
+        
+    except Exception as e:
+        logger.error(f"Failed to convert PDF {pdf_path.name}: {e}")
+        # Clean up any images created so far
+        for img in images:
+            if img.exists():
+                img.unlink()
+        return []
+    
+    return images
+
+
 def collect_receipt_images(folder: Path, logger: ExpenseLogger) -> List[Path]:
     """
-    Scan folder for supported image files.
+    Scan folder for supported image and PDF files.
+    PDFs are converted to images (one image per page) saved in the same folder.
     
     Args:
         folder: Path to receipts folder
         logger: Logger instance
         
     Returns:
-        List of image file paths
+        List of image file paths (including converted PDF pages)
     """
-    logger.info(f"Scanning for receipt images in: {folder}")
+    logger.info(f"Scanning for receipts in: {folder}")
     
     images = []
     skipped = []
@@ -160,7 +215,11 @@ def collect_receipt_images(folder: Path, logger: ExpenseLogger) -> List[Path]:
     for file_path in sorted(folder.iterdir()):
         if file_path.is_file():
             ext = file_path.suffix.lower()
-            if ext in SUPPORTED_EXTENSIONS:
+            if ext == '.pdf':
+                # Convert PDF to images in the same folder
+                pdf_images = pdf_to_images(file_path, logger)
+                images.extend(pdf_images)
+            elif ext in SUPPORTED_EXTENSIONS:
                 images.append(file_path)
             else:
                 skipped.append(file_path.name)
@@ -168,10 +227,10 @@ def collect_receipt_images(folder: Path, logger: ExpenseLogger) -> List[Path]:
     logger.info(f"Found {len(images)} receipt image(s)")
     
     if skipped:
-        logger.debug(f"Skipped {len(skipped)} non-image file(s)")
+        logger.debug(f"Skipped {len(skipped)} non-supported file(s)")
     
     if not images:
-        logger.warning(f"No supported image files found in {folder}")
+        logger.warning(f"No supported files found in {folder}")
         logger.info(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
     
     return images
@@ -202,6 +261,18 @@ def main():
         default='config.json',
         help='Path to config.json (default: config.json)'
     )
+    parser.add_argument(
+        '-f',
+        '--use-default-folder',
+        action='store_true',
+        help='Use last-used/default receipts folder without prompting'
+    )
+    parser.add_argument(
+        '-d',
+        '--dump-html',
+        action='store_true',
+        help='Enable debug mode: dump page HTML snapshots when requested'
+    )
     
     args = parser.parse_args()
     
@@ -217,6 +288,9 @@ def main():
     # Setup logging
     logger = ExpenseLogger(verbose=args.verbose)
     logger.info("Starting Oracle Expense Helper...")
+    
+    # Configure global debug HTML flag
+    set_debug_dump_html(args.dump_html)
     
     # Load configuration
     logger.info("Loading configuration...")
@@ -270,8 +344,44 @@ def main():
             config.save_config()
             logger.info(f"✅ Saved airport city: {airport_city}")
     
+    # Get travel agency from config (ask if not set) - needed for Airfare expenses
+    travel_agency = config.config_data.get('travel_agency', '')
+    if not travel_agency:
+        print("\n" + "=" * 60)
+        print("✈️  TRAVEL AGENCY SETUP")
+        print("=" * 60)
+        print("When you fly, what agency do you use?")
+        print("  1. AMEX GBT (default)")
+        print("  2. OTHERS")
+        print("=" * 60)
+        
+        while True:
+            agency_choice = input("Choose [1]: ").strip()
+            
+            if not agency_choice or agency_choice == "1":
+                travel_agency = "AMEX GBT"
+                break
+            elif agency_choice == "2":
+                travel_agency = "OTHERS"
+                break
+            else:
+                print("❌ Invalid choice. Please enter 1 or 2.")
+        
+        config.config_data['travel_agency'] = travel_agency
+        config.save_config()
+        logger.info(f"✅ Saved travel agency: {travel_agency}")
+    
     # Select receipts folder
-    receipts_folder = select_receipts_folder()
+    if args.use_default_folder:
+        last_folder = get_last_used_folder()
+        if last_folder and last_folder.exists() and last_folder.is_dir():
+            print(f"\n✅ Using folder (from cache): {last_folder}")
+            receipts_folder = last_folder
+        else:
+            # Fall back to interactive selection if cache missing/invalid
+            receipts_folder = select_receipts_folder()
+    else:
+        receipts_folder = select_receipts_folder()
     
     # Collect receipt images
     receipt_paths = collect_receipt_images(receipts_folder, logger)
@@ -309,26 +419,47 @@ def main():
                 logger.error("Login failed or timed out. Exiting.")
                 sys.exit(1)
             
-            # Pre-analyze receipts to find first city that's NOT your airport city
-            trip_destination = "Business Travel"
-            logger.info("Analyzing receipts for trip destination...")
+            # Check for existing unsubmitted report first
+            found_existing = browser_agent.find_unsubmitted_report()
+            existing_items_to_load = []
             
-            for receipt_path in receipt_paths:
-                data, _, _, _ = receipt_processor.analyze_receipt(receipt_path)
-                if data:
-                    city = data.get('city', '').strip()
-                    # Use city if it's different from user's airport city
-                    user_airport = config.config_data.get('airport_city', '')
-                    if city and city.lower() != user_airport.lower():
-                        trip_destination = city
-                        logger.info(f"✅ Found trip destination: {city}")
-                        break
-            
-            # Create new report with purpose
-            purpose = f"Trip to {trip_destination}"
-            if not browser_agent.create_new_report(purpose):
-                logger.error("Failed to create new report. Exiting.")
-                sys.exit(1)
+            if found_existing:
+                # Scan existing items to avoid duplicates
+                existing_items_to_load = browser_agent.scan_existing_items()
+            else:
+                # Pre-analyze receipts to find first city that's NOT your airport city
+                trip_destination: Optional[str] = None
+                logger.info("Analyzing receipts for trip destination...")
+                
+                for receipt_path in receipt_paths:
+                    data, _, _, _ = receipt_processor.analyze_receipt(receipt_path)
+                    if data:
+                        user_airport = config.config_data.get('airport_city', '')
+                        
+                        # For flight receipts, prefer arrival_city as destination
+                        if 'airfare' in data.get('expense_type', '').lower():
+                            arrival_city = data.get('arrival_city', '').strip()
+                            if arrival_city and arrival_city.lower() != user_airport.lower():
+                                trip_destination = arrival_city
+                                logger.info(f"✅ Found trip destination from flight: {arrival_city}")
+                                break
+                        
+                        # Otherwise use generic city field
+                        city = data.get('city', '').strip()
+                        if city and city.lower() != user_airport.lower():
+                            trip_destination = city
+                            logger.info(f"✅ Found trip destination: {city}")
+                            break
+                
+                # Create new report with purpose
+                if trip_destination:
+                    purpose = f"Trip to {trip_destination}"
+                else:
+                    # Ambiguous/non-travel receipts → generic purpose
+                    purpose = "Expense Report"
+                if not browser_agent.create_new_report(purpose):
+                    logger.error("Failed to create new report. Exiting.")
+                    sys.exit(1)
             
             # Skip scraping - use expense types from config.json
             logger.info(f"Using {len(config.get_expense_types())} expense types from config.json")
@@ -343,8 +474,13 @@ def main():
         browser_agent=browser_agent,
         logger=logger,
         test_mode=args.test,
-        user_full_name=config.config_data.get('user_full_name', '')
+        user_full_name=config.config_data.get('user_full_name', ''),
+        travel_agency=config.config_data.get('travel_agency', 'AMEX GBT')
     )
+    
+    # Load existing items if we found an unsubmitted report
+    if not args.test and existing_items_to_load:
+        workflow.existing_items = existing_items_to_load
     
     # Process all receipts
     try:
@@ -354,7 +490,11 @@ def main():
             logger.error("No receipts were successfully processed")
             sys.exit(1)
         
-        logger.info("\n✅ Expense processing complete!")
+        # Check if all receipts were duplicates
+        if workflow.receipts_duplicate > 0 and workflow.receipts_processed == 0:
+            print("\n✅ All receipts were already filed. No action taken.")
+        else:
+            print("\n✅ Expense processing complete!")
         
         if args.test:
             logger.info("(Test mode - no changes made to Oracle)")
@@ -365,8 +505,6 @@ def main():
         logger.error(f"\n❌ Unexpected error: {e}")
         import traceback
         logger.debug(traceback.format_exc())
-    
-    logger.info("Done!")
     
     # Keep browser open for user to review/complete
     if browser_agent and not args.test:

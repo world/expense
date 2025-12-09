@@ -65,6 +65,15 @@ INSTRUCTIONS:
    HOTELS (Westin, Marriott, Hilton, Hyatt, IHG, etc.):
    - Room charges, lodging, accommodation → "Travel-Hotel Accommodation"
    - Even if breakfast is included, if it's a hotel folio/bill → "Travel-Hotel Accommodation"
+   - Also infer:
+     - nights: number of nights stayed (integer)
+     - check_in_date and check_out_date if visible
+   - IMPORTANT: If the total_amount is less than 100 (in the receipt currency) AND
+     there is no clear evidence that this is a hotel folio/bill (no room/guest
+     details, no check-in/check-out dates, no nightly breakdown, no words like
+     "Hotel", "Inn", "Suites", "Resort", etc.), then DO NOT use a hotel type.
+     For such small ambiguous charges, prefer a non-hotel type, and if nothing
+     fits well, use the most appropriate "Miscellaneous Other" style expense type.
    
    MEALS (only for standalone restaurants/cafes):
    - CHECK THE TIME on the receipt if visible!
@@ -75,27 +84,111 @@ INSTRUCTIONS:
    - Coffee shops (Starbucks, Dunkin, etc.) → usually "Meals-Breakfast and Tip" unless PM timestamp
    
    TRANSPORTATION:
-   - Uber/Lyft/rideshare → "Travel-Non-Car Rental Ground Transport"
+   - Uber/Lyft/rideshare → "Taxi"
+   - Traditional taxis → "Taxi"
    - Gas stations → "Travel-Gasoline"
    - Parking → "Travel-Parking And Tolls"
    - Airlines → "Travel-Airfare"
-   - Taxis → "Taxi"
-   
+   - Other ground transport (shuttle, bus, train, rail, airport shuttle, etc.) → "Travel-Non-Car Rental Ground Transport"
+  
    - If unclear → "Miscellaneous Other"
+   - Travelers often purchase Wi-Fi on airplanes; treat in-flight Wi-Fi or internet passes as "Travel-Telephone, Fax, Remote Access" (not "Mobile Phone")
+   - Airfare vs other travel: ONLY use "Travel-Airfare" when BOTH are true:
+       * the receipt clearly shows a flight/ticket (airline name + flight number, boarding pass, fare breakdown, or ticket price), AND
+       * the amount is relatively large (typically more than 50 USD).
+   - Small charges (≈ 50 USD or less) at airports with no explicit flight/ticket details, or merchants that look like locations only (e.g. just an airport name like "AUSTIN BERGSTROM"), must NOT be "Travel-Airfare"; pick the closest non‑airfare travel type or "Miscellaneous Other" instead.
+   - Use "Travel-Non-Car Rental Ground Transport" ONLY when the receipt clearly indicates a specific mode of transport (Uber/Lyft, taxi, shuttle, bus, rail, etc.). If the receipt just shows an airport/location name and a small fee with no vehicle/ride mentioned, prefer "Miscellaneous Other" instead.
 
-3. Extract the EXACT date shown on receipt in DD-MM-YYYY format
-4. Extract the total/final amount (not subtotal)
+3. Extract the date in DD-MM-YYYY format:
+   - For MULTI-DAY receipts (Uber summaries, weekly/monthly statements):
+     * Use the EARLIEST/FIRST date shown on the receipt
+     * Example: If receipt shows rides from Nov 19-21, use Nov 19
+   - For single-transaction receipts that are NOT flights: Use the transaction/purchase date
+   - For FLIGHT receipts (Travel-Airfare):
+     * Prefer the actual FLIGHT/DEPARTURE date shown on the ticket/itinerary
+       (e.g. a segment date near the origin/destination cities or boarding time),
+       not the original ticket PURCHASE/ISSUE date.
+     * If multiple flight segments are listed, use the departure date of the
+       FIRST segment in the trip.
+     * Only fall back to the purchase/issue date if there is no clear flight
+       or departure date anywhere on the receipt.
+4. Extract the total/final amount (not subtotal):
+   - IMPORTANT: for receipts with NO explicit total line, ALWAYS add up all visible line item expenses and use that sum as the total_amount.
 5. Generate a 2-5 word description of the purchase
 
+FOR FLIGHT RECEIPTS (Travel-Airfare), ALSO EXTRACT:
+   - ticket_number: Confirmation/ticket number from receipt
+   - departure_city: Origin airport city
+   - arrival_city: Destination airport city
+   - flight_type: "Domestic" (both cities in USA) OR "International"
+   - flight_duration_hours: Flight time in hours (decimal, e.g. 6.5) - look for "Duration" or flight time
+   - If flight is international AND >= 6 hours → flight_class: "Business", else "Coach"
+
 REQUIRED OUTPUT - Return ONLY this JSON (no markdown, no explanation):
-{{"expense_type":"<exact type from list>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>","city":"<city name if visible>"}}
+{{"expense_type":"<exact type from list>","merchant":"<business name>","total_amount":<number>,"currency":"<USD/EUR/etc>","date":"<DD-MM-YYYY>","description":"<2-5 words>","city":"<city name if visible>","ticket_number":"<ticket/confirmation number or empty>","departure_city":"<origin city or empty>","arrival_city":"<destination city or empty>","flight_type":"<Domestic/International or empty>","flight_duration_hours":<hours or 0>,"nights":<integer or 0>,"check_in_date":"<DD-MM-YYYY or empty>","check_out_date":"<DD-MM-YYYY or empty>","line_items":[{{\"amount\":<number>,\"date\":\"<DD-MM-YYYY or empty>\",\"description\":\"<optional short text>\"}}]}}
 
 If date is not visible, use today: {datetime.now().strftime('%d-%m-%Y')}
 If amount unclear, use 0.
 If city not visible on receipt, use empty string.
+For non-flight expenses, leave flight fields and hotel fields empty or 0.
 
-Example:
-{{"expense_type":"Meals-Breakfast and Tip","merchant":"Starbucks","total_amount":9.58,"currency":"USD","date":"19-11-2024","description":"Coffee and pastry","city":"Chicago"}}"""
+Example (meal):
+{{"expense_type":"Meals-Breakfast and Tip",
+  "merchant":"Starbucks",
+  "total_amount":9.58,
+  "currency":"USD",
+  "date":"19-11-2024",
+  "description":"Coffee and pastry",
+  "city":"Chicago",
+  "ticket_number":"",
+  "departure_city":"",
+  "arrival_city":"",
+  "flight_type":"",
+  "flight_duration_hours":0,
+  "nights":0,
+  "check_in_date":"",
+  "check_out_date":"",
+  "line_items":[{{"amount":9.58,"date":"19-11-2024","description":"Coffee and pastry"}}]}}
+
+Example (flight):
+{{"expense_type":"Travel-Airfare",
+  "merchant":"United Airlines",
+  "total_amount":450.00,
+  "currency":"USD",
+  "date":"15-12-2024",
+  "description":"Flight SFO to JFK",
+  "city":"San Francisco",
+  "ticket_number":"ABC123XYZ",
+  "departure_city":"San Francisco",
+  "arrival_city":"New York",
+  "flight_type":"Domestic",
+  "flight_duration_hours":5.5,
+  "nights":0,
+  "check_in_date":"",
+  "check_out_date":"",
+  "line_items":[{{"amount":450.00,"date":"15-12-2024","description":"Flight SFO to JFK"}}]}}
+
+Example (hotel):
+{{"expense_type":"Travel-Hotel Accommodation",
+  "merchant":"The Westin Chicago",
+  "total_amount":600.00,
+  "currency":"USD",
+  "date":"10-12-2024",
+  "description":"Hotel stay 3 nights",
+  "city":"Chicago",
+  "ticket_number":"",
+  "departure_city":"",
+  "arrival_city":"",
+  "flight_type":"",
+  "flight_duration_hours":0,
+  "nights":3,
+  "check_in_date":"10-12-2024",
+  "check_out_date":"13-12-2024",
+  "line_items":[
+    {{"amount":200.00,"date":"10-12-2024","description":"Night 1"}},
+    {{"amount":200.00,"date":"11-12-2024","description":"Night 2"}},
+    {{"amount":200.00,"date":"12-12-2024","description":"Night 3"}}
+  ]}}"""
     
     def call_vision_api(self, image_path: Path) -> Tuple[Optional[str], Optional[str]]:
         """Call Claude or OpenAI vision API with receipt image."""
@@ -226,11 +319,33 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
             
             data = json.loads(response_text.strip())
             
-            # Validate required fields (city is optional)
+            # Validate required fields (city, flight, and hotel fields are optional)
             required = ['expense_type', 'merchant', 'total_amount', 'currency', 'date', 'description']
-            # Ensure city field exists even if empty
+            # Ensure optional fields exist even if empty
             if 'city' not in data:
                 data['city'] = ''
+            if 'ticket_number' not in data:
+                data['ticket_number'] = ''
+            if 'departure_city' not in data:
+                data['departure_city'] = ''
+            if 'arrival_city' not in data:
+                data['arrival_city'] = ''
+            if 'flight_type' not in data:
+                data['flight_type'] = ''
+            if 'flight_duration_hours' not in data:
+                data['flight_duration_hours'] = 0
+            if 'nights' not in data:
+                data['nights'] = 0
+            if 'check_in_date' not in data:
+                data['check_in_date'] = ''
+            if 'check_out_date' not in data:
+                data['check_out_date'] = ''
+            # line_items is optional; default to empty list
+            line_items = data.get('line_items') or []
+            if not isinstance(line_items, list):
+                line_items = []
+            data['line_items'] = line_items
+            
             missing = [f for f in required if f not in data or data[f] is None or str(data[f]).strip() == '']
             if missing:
                 warnings.append(f"Missing required fields: {missing}")
@@ -242,6 +357,24 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
             except (ValueError, TypeError):
                 warnings.append(f"Invalid amount: {data.get('total_amount')}")
                 data['total_amount'] = 0.0
+
+            # If we have line_items and either no total or an obviously wrong one, recompute
+            if line_items:
+                summed = 0.0
+                for i, item in enumerate(line_items):
+                    try:
+                        amt = float(item.get('amount', 0) or 0)
+                    except (ValueError, TypeError):
+                        warnings.append(f"Invalid line_items[{i}].amount: {item.get('amount')}")
+                        amt = 0.0
+                    summed += amt
+
+                # If total_amount is zero OR differs from sum by more than a few cents, trust the sum
+                if abs(data['total_amount'] - summed) > 0.05:
+                    warnings.append(
+                        f"total_amount {data['total_amount']:.2f} adjusted to sum of line_items {summed:.2f}"
+                    )
+                    data['total_amount'] = summed
             
             # Validate expense_type against known types
             if data['expense_type'] not in self.expense_types:
@@ -251,6 +384,27 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
                     data['expense_type'] = misc_type
                 else:
                     data['expense_type'] = self.expense_types[-1]  # Last one is usually "Other"
+
+            # Guardrail: very small hotel amounts are almost never real lodging.
+            # If the model still picked a hotel-type expense under 100, coerce it
+            # to a Misc/Other bucket to avoid bogus hotel charges.
+            try:
+                if (
+                    data['total_amount'] < 100
+                    and any(word in str(data['expense_type']).lower() for word in ['hotel', 'lodging'])
+                ):
+                    misc_type = next(
+                        (t for t in self.expense_types if 'other' in t.lower() or 'misc' in t.lower()),
+                        None,
+                    )
+                    if misc_type:
+                        warnings.append(
+                            f"Hotel-type expense under 100 recoded to '{misc_type}' to avoid false hotel charges"
+                        )
+                        data['expense_type'] = misc_type
+            except Exception:
+                # If anything goes wrong here, just leave the original type.
+                pass
             
             # Truncate long description
             if data['description'] and len(data['description']) > 100:
@@ -277,6 +431,22 @@ If date unclear, use: {datetime.now().strftime('%d-%m-%Y')}"""
                     data['date'] = datetime.now().strftime('%d-%m-%Y')
             else:
                 data['date'] = datetime.now().strftime('%d-%m-%Y')
+            
+            # Calculate flight_class for airfare expenses
+            if 'airfare' in data['expense_type'].lower():
+                flight_type = data.get('flight_type', '').strip()
+                try:
+                    duration = float(data.get('flight_duration_hours', 0))
+                except (ValueError, TypeError):
+                    duration = 0
+                
+                # Business class if International AND >= 6 hours, else Coach
+                if flight_type.lower() == 'international' and duration >= 6.0:
+                    data['flight_class'] = 'Business'
+                else:
+                    data['flight_class'] = 'Coach'
+            else:
+                data['flight_class'] = ''
             
             return data, warnings
             

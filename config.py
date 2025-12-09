@@ -414,9 +414,19 @@ class Config:
         
         return False
     
-    def get_expense_types(self) -> List[Dict[str, Any]]:
-        """Get expense type definitions."""
-        return self.config_data.get('expense_types', [])
+    def get_expense_types(self) -> List[str]:
+        """Get expense type names (for LLM prompts)."""
+        expense_types = self.config_data.get('expense_types', {})
+        if isinstance(expense_types, dict):
+            return list(expense_types.keys())
+        return expense_types  # Backward compatibility if it's still an array
+    
+    def get_expense_type_fields(self, expense_type: str) -> List[str]:
+        """Get required fields for a specific expense type."""
+        expense_types = self.config_data.get('expense_types', {})
+        if isinstance(expense_types, dict):
+            return expense_types.get(expense_type, [])
+        return []  # No fields if using old array format
     
     def get_oracle_url(self) -> str:
         """Get Oracle expenses URL."""

@@ -18,17 +18,21 @@ class ExpenseWorkflow:
         browser_agent: OracleBrowserAgent,
         logger,
         test_mode: bool = False,
-        user_full_name: str = None
+        user_full_name: str = None,
+        travel_agency: str = "AMEX GBT"
     ):
         self.receipt_processor = receipt_processor
         self.browser_agent = browser_agent
         self.logger = logger
         self.test_mode = test_mode
         self.user_full_name = user_full_name
+        self.travel_agency = travel_agency
         self.last_used_date: Optional[str] = None
         self.totals_by_currency: Dict[str, float] = {}
         self.receipts_processed = 0
         self.receipts_skipped = 0
+        self.receipts_duplicate = 0  # Track duplicates separately
+        self.existing_items: List[Dict] = []  # Track items already in the report
     
     def resolve_date(self, llm_date: Optional[str], receipt_index: int, receipt_filename: str) -> Tuple[str, str]:
         """
@@ -95,13 +99,58 @@ class ExpenseWorkflow:
             else:
                 print("❌ Invalid date format. Please use DD-MM-YYYY (e.g., 15-01-2025)")
     
+    def is_duplicate(self, amount: float, merchant: str, date: str = "") -> bool:
+        """
+        Check if an expense item already exists in the report.
+        
+        Args:
+            amount: Expense amount
+            merchant: Merchant name
+            date: Expense date (DD-MM-YYYY format, optional)
+            
+        Returns:
+            True if duplicate found
+        """
+        for existing in self.existing_items:
+            # Match on exact amount (within 1 cent)
+            if abs(existing['amount'] - amount) < 0.01:
+                # If merchant is also available and matches, it's definitely a duplicate
+                existing_merchant = existing.get('merchant', '').lower().strip()
+                new_merchant = merchant.lower().strip()
+                
+                # Match if merchants are similar (one contains the other)
+                if existing_merchant and new_merchant:
+                    if existing_merchant in new_merchant or new_merchant in existing_merchant:
+                        # If we also have dates, verify they match (convert formats if needed)
+                        existing_date = existing.get('date', '')
+                        if existing_date and date:
+                            # Convert DD-MM-YYYY to DD-MMM-YYYY for comparison
+                            # existing_date is like "19-Nov-2025", date is like "19-11-2025"
+                            try:
+                                from datetime import datetime
+                                parsed_new = datetime.strptime(date, '%d-%m-%Y')
+                                formatted_new = parsed_new.strftime('%d-%b-%Y')
+                                if formatted_new.lower() == existing_date.lower():
+                                    return True
+                            except:
+                                # If date parsing fails, just match on amount+merchant
+                                return True
+                        else:
+                            # No dates to compare, match on amount+merchant
+                            return True
+                else:
+                    # If no merchant info, just match on amount
+                    return True
+        
+        return False
+    
     def process_receipt(
         self,
         image_path: Path,
         index: int,
         total: int,
         is_first: bool
-    ) -> bool:
+    ) -> tuple[bool, bool]:
         """
         Process a single receipt: OCR, LLM, date resolution, and optionally create in Oracle.
         
@@ -112,7 +161,7 @@ class ExpenseWorkflow:
             is_first: Whether this is the first receipt
             
         Returns:
-            True if successful
+            (success, created_in_oracle): success=True if no errors, created_in_oracle=True if item was added to Oracle
         """
         self.logger.info(f"\n{'='*70}")
         self.logger.info(f"Processing receipt #{index}/{total}: {image_path.name}")
@@ -135,10 +184,16 @@ class ExpenseWorkflow:
                     self.logger.warning(f"  └─ {warning}")
             
             self.receipts_skipped += 1
-            return False
+            return (False, False)
         
         # Step 2: Resolve date
+        # For hotels, prefer the check-in date so top-level Date matches first night of stay
+        expense_type_label = data.get('expense_type', 'Miscellaneous Other')
         llm_date = data.get('date')
+        if 'hotel' in expense_type_label.lower():
+            check_in = data.get('check_in_date')
+            if check_in:
+                llm_date = check_in
         final_date, date_source = self.resolve_date(llm_date, index, image_path.name)
         
         # Step 3: Accumulate totals
@@ -155,7 +210,7 @@ class ExpenseWorkflow:
             filename=image_path.name,
             index=index,
             total_receipts=total,
-            expense_type=data.get('expense_type', 'Miscellaneous Other'),
+            expense_type=expense_type_label,
             total_amount=amount,
             currency=currency,
             merchant=data.get('merchant', 'Unknown'),
@@ -168,30 +223,51 @@ class ExpenseWorkflow:
             raw_llm_response=data.get('_raw_llm_response') if self.logger.verbose else None
         )
         
-        # Step 5: Create in Oracle (unless test mode)
+        # Step 5: Check for duplicates, then create in Oracle (unless test mode)
         if not self.test_mode:
+            # Check if this item already exists
+            merchant = data.get('merchant', 'Unknown')
+            if self.is_duplicate(amount, merchant, final_date):
+                self.logger.info(f"⏭️  Already filed: {final_date} | ${amount:.2f} | {merchant}")
+                self.receipts_duplicate += 1
+                return (True, False)  # Success but not created in Oracle (duplicate)
+            
             success = self.browser_agent.create_expense_item(
                 expense_type=data.get('expense_type', 'Miscellaneous Other'),
                 amount=amount,
                 date=final_date,
-                merchant=data.get('merchant', 'Unknown'),
+                merchant=merchant,
                 description=data.get('description', 'Expense'),
                 receipt_path=str(image_path),
                 is_first=is_first,
-                user_full_name=self.user_full_name
+                ticket_number=data.get('ticket_number', ''),
+                departure_city=data.get('departure_city', ''),
+                arrival_city=data.get('arrival_city', ''),
+                flight_type=data.get('flight_type', ''),
+                flight_class=data.get('flight_class', ''),
+                nights=int(data.get('nights', 0) or 0),
+                check_in_date=data.get('check_in_date', ''),
+                check_out_date=data.get('check_out_date', '')
             )
             
             if success:
-                self.logger.info(f"✅ Expense item created in Oracle")
+                self.logger.info(f"✅ Expense item fully created in Oracle (all fields filled)")
                 self.receipts_processed += 1
+                # Add to existing items to prevent future duplicates
+                self.existing_items.append({
+                    'amount': amount,
+                    'merchant': merchant,
+                    'date': final_date
+                })
+                return (True, True)  # Success and created in Oracle
             else:
                 self.logger.error(f"❌ Failed to create expense item in Oracle")
                 self.receipts_skipped += 1
-                return False
+                return (False, False)
         else:
+            # Test mode - no Oracle interaction
             self.receipts_processed += 1
-        
-        return True
+            return (True, False)
     
     def process_all_receipts(self, receipt_paths: List[Path]) -> bool:
         """
@@ -215,9 +291,10 @@ class ExpenseWorkflow:
             is_first = (i == 1)
             is_last = (i == total)
             
-            success = self.process_receipt(path, i, total, is_first)
+            success, created_in_oracle = self.process_receipt(path, i, total, is_first)
             
-            if success and not self.test_mode:
+            # Only click buttons if we actually created an item in Oracle
+            if created_in_oracle:
                 # Handle "Create Another" vs "Save and Close"
                 if not is_last:
                     self.logger.info(f"\n--- Moving to next receipt ({i+1}/{total}) ---")
@@ -226,12 +303,18 @@ class ExpenseWorkflow:
                         # Fall back to regular create item flow
                         self.logger.warning("Create Another failed, will try Create Item for next receipt")
                 else:
-                    # Last receipt - save and close
+                    # Last receipt - save and close, then STOP doing any further browser interactions
+                    import time
+                    self.logger.info(f"\n⏱️  [TIMESTAMP] About to call click_save_and_close at {time.time():.3f}")
                     self.logger.info("\n--- Last receipt, saving and closing ---")
                     self.browser_agent.click_save_and_close()
+                    self.logger.info(f"⏱️  [TIMESTAMP] click_save_and_close returned at {time.time():.3f}")
+
+                    # Immediately break out after Save and Close to avoid any stray interactions
+                    break
         
-        # Log summary
-        self.logger.log_summary(self.totals_by_currency, self.receipts_skipped)
+        # Log summary (pure logging, no browser interaction)
+        self.logger.log_summary(self.totals_by_currency, self.receipts_skipped, self.receipts_duplicate)
         
-        return self.receipts_processed > 0
+        return (self.receipts_processed + self.receipts_duplicate) > 0
 

@@ -144,20 +144,21 @@ class ExpenseLogger:
         for warning in warnings:
             self.warning(f"  └─ {warning}")
     
-    def log_summary(self, totals_by_currency: Dict[str, float], skipped: int = 0):
+    def log_summary(self, totals_by_currency: Dict[str, float], skipped: int = 0, duplicates: int = 0):
         """
         Log final summary of all receipts processed.
         
         Args:
             totals_by_currency: Dict mapping currency code to total amount
             skipped: Number of receipts skipped due to errors
+            duplicates: Number of receipts skipped because already filed
         """
         total_processed = len(self.receipt_logs)
         
         # Console summary with detailed table
-        print("\n" + "🤑" * 60)
+        print("\n" + "🤑" * 45)
         print("                              💰 EXPENSE REPORT SUMMARY 💰")
-        print("🤑" * 60)
+        print("🤑" * 45)
         
         if self.receipt_logs:
             # Print header
@@ -181,14 +182,17 @@ class ExpenseLogger:
         # Totals section
         print(f"\n{'PROCESSED:':<20} {total_processed} receipts")
         
+        if duplicates > 0:
+            print(f"{'ALREADY FILED:':<20} {duplicates} receipts (skipped)")
+        
         if skipped > 0:
-            print(f"{'SKIPPED:':<20} {skipped} receipts due to errors")
+            print(f"{'ERRORS:':<20} {skipped} receipts failed")
         
         print(f"\n{'TOTAL BY CURRENCY:':}")
         for currency, total in sorted(totals_by_currency.items()):
             print(f"  {currency:>5}: {total:>12.2f}")
         
-        print("\n" + "🤑" * 60 + "\n")
+        print("\n" + "🤑" * 45 + "\n")
         
         # Structured summary to log file
         summary_data = {

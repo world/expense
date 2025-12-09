@@ -17,6 +17,8 @@ help:
 	@echo ""
 	@echo "Run commands:"
 	@echo "  make run                - Run the expense helper (normal mode)"
+	@echo "  make run-f              - Run using last-used receipts folder (no prompt)"
+	@echo "  make run-f-debug        - Same as run-f, but with HTML debug dumps enabled (-d)"
 	@echo "  make test               - Run in test mode (no Oracle changes)"
 	@echo "  make test-reset         - Test mode + reset LLM settings"
 	@echo "  make run-verbose        - Run with verbose/debug logging"
@@ -106,6 +108,20 @@ run:
 		exit 1; \
 	fi
 	$(VENV_PYTHON) main.py
+
+run-f:
+	@if [ ! -d "$(VENV)" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	$(VENV_PYTHON) main.py --use-default-folder
+
+run-f-debug:
+	@if [ ! -d "$(VENV)" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	$(VENV_PYTHON) main.py --use-default-folder --dump-html
 
 test:
 	@if [ ! -d "$(VENV)" ]; then \
